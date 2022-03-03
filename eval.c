@@ -18,6 +18,20 @@ JSValue dispatch(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *
     return value;
 }
 
+/* main loop which calls the user JS callbacks */
+void js_std_loop(JSContext *ctx)
+{
+    JSContext *ctx1;
+    int err;
+    /* execute the pending jobs */
+    for(;;) {
+        err = JS_ExecutePendingJob(JS_GetRuntime(ctx), &ctx1);
+        if (err <= 0) {
+            break;
+        }
+    }
+}
+
 // TODO: free JSContext
 EMSCRIPTEN_KEEPALIVE
 const char* eval(char* str) {
@@ -31,5 +45,6 @@ const char* eval(char* str) {
 		JSValue realException = JS_GetException(ctx);
 		return JS_ToCString(ctx, realException);
 	}
+    js_std_loop(ctx);
     return 0;
 }

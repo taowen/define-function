@@ -11,15 +11,19 @@ module.exports = async function (script) {
     }
     return function (...args) {
         const key = `key${nextId++}`;
-        let syncResult = undefined;
+        let result = () => { throw new Error('internal error: missing result') };
         wasm[key] = {
             invoke(invokeArgs) {
                 const result = args[invokeArgs.slot](...invokeArgs.args);
                 // eval.c dispatch will free this memory
                 return encodeString(wasm, JSON.stringify(result));
             },
-            setSyncResult(result) {
-                syncResult = result;
+            setSuccess(value) {
+                result = () => value;
+                return 0;
+            },
+            setFailure(error) {
+                result = () => { throw new Error(err) }
                 return 0;
             }
         };
@@ -38,11 +42,20 @@ module.exports = async function (script) {
                 }
                 return arg;
             }
+            function dispatch(action, args) {
+                __dispatch(action, __key, JSON.stringify(args));
+            }
             try {
                 const result = f.apply(undefined, __args.map((arg, i) => decodeArg(arg, i)));
-                __dispatch('setSyncResult', __key, JSON.stringify({ success: result }));
+                if (result && result.then && result.catch) {
+                    result
+                        .then(dispatch.bind(undefined, 'setSuccess'))
+                        .catch(dispatch.bind(undefined, 'setFailure'))
+                } else {
+                    dispatch('setSuccess', result);
+                }
             } catch(e) {
-                __dispatch('setSyncResult', __key, JSON.stringify({ failure: "" + e }));
+                dispatch('setFailure', "" + e);
             }
             `);
         try {
@@ -50,13 +63,7 @@ module.exports = async function (script) {
             if (pError) {
                 throw new Error(decodePtrString(wasm, pError));
             }
-            if (!syncResult) {
-                throw new Error('internal error: missing sync result');
-            }
-            if (syncResult.error) {
-                throw new Error(syncResult.error);
-            }
-            return syncResult.success;
+            return result();
         } finally {
             delete wasm[key];
             wasm._free(pScript);
