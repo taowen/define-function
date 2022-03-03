@@ -1,29 +1,88 @@
 let nextId = 1;
 
-module.exports = async function (script) {
+module.exports = async function (script, timeout = -1) {
     const wasm = require('./eval')();
     await wasm.ready;
+    wasm.log = (encodedMsg) => {
+        console.log(decodePtrString(wasm, encodedMsg));
+    }
     wasm.dispatch = (encodedAction, encodedKey, encodedArgs) => {
         const action = decodePtrString(wasm, encodedAction);
         const key = decodePtrString(wasm, encodedKey);
-        const args = JSON.parse(decodePtrString(wasm, encodedArgs));
-        return wasm[key][action](args);
+        const args = decodePtrString(wasm, encodedArgs);
+        return wasm[key][action](args === 'undefined' ? undefined : JSON.parse(args));
+    }
+    wasm.setPromiseCallbacks = (encodedKey, encodedPromiseId, resolveFunc, rejectFunc) => {
+        const key = decodePtrString(wasm, encodedKey);
+        const promiseId = decodePtrString(wasm, encodedPromiseId);
+        return wasm[key]['setPromiseCallbacks']({ promiseId, resolveFunc, rejectFunc });
     }
     return function (...args) {
+        const ctx = wasm._newContext();
         const key = `key${nextId++}`;
-        let result = () => { throw new Error('internal error: missing result') };
+        const callbacks = {};
+        let resolveAsyncResult;
+        let rejectAsyncResult;
+        function dispose() {
+            if (!wasm[key]) {
+                return; // already disposed
+            }
+            wasm._free(pScript);
+            // wasm._freeContext(ctx); // TODO: fix memory leak
+            wasm[key] = undefined;
+        }
+        const asyncResult = new Promise((resolve, reject) => {
+            resolveAsyncResult = resolve;
+            rejectAsyncResult = reject;
+        }).finally(dispose);
+        let syncResult = () => {
+            if (timeout <= 0) {
+                return asyncResult;
+            }
+            return Promise.race([asyncResult, (async () => {
+                await new Promise(resolve => setTimeout(resolve, timeout));
+                dispose();
+                throw new Error('execute function timeout');
+            })()]);
+        };
         wasm[key] = {
             invoke(invokeArgs) {
-                const result = args[invokeArgs.slot](...invokeArgs.args);
+                const invokeResult = args[invokeArgs.slot](...invokeArgs.args);
+                if (invokeResult && invokeResult.then && invokeResult.catch) {
+                    const promiseId = `p${nextId++}`;
+                    const callback = callbacks[promiseId] = {
+                        promise: invokeResult,
+                        rejectFunc: undefined, // will be filled by setPromiseCallbacks
+                        resolveFunc: undefined, // will be filled by setPromiseCallbacks
+                    };
+                    invokeResult
+                        .then(v => {
+                            const pError = wasm._resolve(ctx, callback.resolveFunc, encodeString(wasm, JSON.stringify(v)));
+                            if (pError) {
+                                this.setFailure(decodePtrString(wasm, pError));
+                            }
+                        })
+                        .catch(e => {
+                            console.log('reject', e, callback.rejectFunc);
+                        });
+                    return encodeString(wasm, promiseId);
+                }
                 // eval.c dispatch will free this memory
-                return encodeString(wasm, JSON.stringify(result));
+                return encodeString(wasm, JSON.stringify(invokeResult));
+            },
+            setPromiseCallbacks({ promiseId, rejectFunc, resolveFunc }) {
+                callbacks[promiseId].resolveFunc = resolveFunc;
+                callbacks[promiseId].rejectFunc = rejectFunc;
+                return 0;
             },
             setSuccess(value) {
-                result = () => value;
+                syncResult = () => value;
+                resolveAsyncResult(value);
                 return 0;
             },
             setFailure(error) {
-                result = () => { throw new Error(err) }
+                syncResult = () => { throw new Error(error) };
+                rejectAsyncResult(new Error(error));
                 return 0;
             }
         };
@@ -49,8 +108,8 @@ module.exports = async function (script) {
                 const result = f.apply(undefined, __args.map((arg, i) => decodeArg(arg, i)));
                 if (result && result.then && result.catch) {
                     result
-                        .then(dispatch.bind(undefined, 'setSuccess'))
-                        .catch(dispatch.bind(undefined, 'setFailure'))
+                        .then((v) => { dispatch('setSuccess', v); })
+                        .catch((e) => { dispatch('setFailure', "" + e); })
                 } else {
                     dispatch('setSuccess', result);
                 }
@@ -58,20 +117,18 @@ module.exports = async function (script) {
                 dispatch('setFailure', "" + e);
             }
             `);
-        try {
-            const pError = wasm._eval(pScript)
-            if (pError) {
-                throw new Error(decodePtrString(wasm, pError));
-            }
-            return result();
-        } finally {
-            delete wasm[key];
-            wasm._free(pScript);
+        const pError = wasm._eval(ctx, pScript)
+        if (pError) {
+            throw new Error(decodePtrString(wasm, pError));
         }
+        return syncResult();
     }
 }
 
 function encodeString(wasm, string) {
+    if (string === undefined) {
+        return undefined;
+    }
     var octets = [];
     var length = string.length;
     var i = 0;
