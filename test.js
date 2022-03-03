@@ -2,23 +2,15 @@ async function test1() {
     try {
         const f = await require('./index')(`
             return (async () => {
-                arguments[1]();
                 await arguments[0]();
-                arguments[1]();
+                return 'hello';
             })()
         `);
         console.log('done', await f(async () => {
-            try {
-                console.log('before');
-                await new Promise(resolve => setTimeout(resolve, 1000));
-                console.log('after');
-            } catch(e) {
-                console.log('caught', e);
-            }
+            await new Promise(resolve => setTimeout(resolve, 1000));
         }, (s) => {
             console.log('!!! ' + s)
         }));
-        console.log('~~~');
     } catch(e) {
         console.log(e);
     }

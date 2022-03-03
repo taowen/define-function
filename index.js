@@ -1,6 +1,6 @@
 let nextId = 1;
 
-module.exports = async function (script, timeout = -1) {
+module.exports = async function (script, options) {
     const wasm = require('./eval')();
     await wasm.ready;
     wasm.log = (encodedMsg) => {
@@ -36,13 +36,16 @@ module.exports = async function (script, timeout = -1) {
             rejectAsyncResult = reject;
         }).finally(dispose);
         let syncResult = () => {
-            if (timeout <= 0) {
-                return asyncResult;
-            }
             return Promise.race([asyncResult, (async () => {
-                await new Promise(resolve => setTimeout(resolve, timeout));
-                dispose();
-                throw new Error('execute function timeout');
+                if (options?.timeout) {
+                    await new Promise(resolve => setTimeout(resolve, options.timeout));
+                    dispose();
+                    throw new Error('execute function timeout');
+                } else {
+                    while(wasm[key]) {
+                        await new Promise(resolve => setTimeout(resolve, 1000));
+                    }
+                }
             })()]);
         };
         wasm[key] = {
@@ -57,13 +60,16 @@ module.exports = async function (script, timeout = -1) {
                     };
                     invokeResult
                         .then(v => {
-                            const pError = wasm._resolve(ctx, callback.resolveFunc, encodeString(wasm, JSON.stringify(v)));
+                            const pError = wasm._call(ctx, callback.resolveFunc, encodeString(wasm, JSON.stringify(v)));
                             if (pError) {
                                 this.setFailure(decodePtrString(wasm, pError));
                             }
                         })
                         .catch(e => {
-                            console.log('reject', e, callback.rejectFunc);
+                            const pError = wasm._call(ctx, callback.rejectFunc, encodeString(wasm, '' + e));
+                            if (pError) {
+                                this.setFailure(decodePtrString(wasm, pError));
+                            }
                         });
                     return encodeString(wasm, promiseId);
                 }
@@ -89,27 +95,27 @@ module.exports = async function (script, timeout = -1) {
         const pScript = encodeString(wasm, `
             const __key = '${key}';
             const __args = ${JSON.stringify(args.map(arg => typeof arg === 'function' ? { __f__: true } : arg))};
-            function f() {
-                ${script}
+            function dispatch(action, args) {
+                __dispatch(action, __key, JSON.stringify(args));
             }
             function decodeArg(arg, i) {
                 // the argument is a function
                 if (arg && arg.__f__) {
                     return function(...args) {
-                        return __dispatch('invoke', __key, JSON.stringify({slot:i, args}));
+                        return dispatch('invoke', {slot:i, args});
                     }
                 }
                 return arg;
             }
-            function dispatch(action, args) {
-                __dispatch(action, __key, JSON.stringify(args));
+            function f() {
+                ${script}
             }
             try {
                 const result = f.apply(undefined, __args.map((arg, i) => decodeArg(arg, i)));
                 if (result && result.then && result.catch) {
                     result
-                        .then((v) => { dispatch('setSuccess', v); })
-                        .catch((e) => { dispatch('setFailure', "" + e); })
+                        .then(v => { dispatch('setSuccess', v); })
+                        .catch(e => { dispatch('setFailure', '' + e); })
                 } else {
                     dispatch('setSuccess', result);
                 }

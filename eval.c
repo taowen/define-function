@@ -74,12 +74,13 @@ const char* eval(JSContext* ctx, char* str) {
 		JSValue realException = JS_GetException(ctx);
 		return JS_ToCString(ctx, realException);
 	}
+    JS_FreeValue(ctx, result);
     js_std_loop(ctx);
     return 0;
 }
 
 EMSCRIPTEN_KEEPALIVE
-const char* resolve(JSContext* ctx, JSValue* pFunc, const char* args) {
+const char* call(JSContext* ctx, JSValue* pFunc, const char* args) {
     JSValue argsVal = JS_UNDEFINED;
     if (args) {
         argsVal = JS_ParseJSON(ctx, args, strlen(args), "");
@@ -91,6 +92,7 @@ const char* resolve(JSContext* ctx, JSValue* pFunc, const char* args) {
 		JSValue realException = JS_GetException(ctx);
 		return JS_ToCString(ctx, realException);
 	}
+    JS_FreeValue(ctx, result);
     js_std_loop(ctx);
     return 0;
 }
