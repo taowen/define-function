@@ -1,4 +1,4 @@
-module.exports = async function() {
+module.exports = async function(script) {
     const wasm = require('./eval')();
     await wasm.ready;
     Object.assign(wasm, {
@@ -6,12 +6,24 @@ module.exports = async function() {
             console.log('!!! called');
         }
     })
-    const pool = new ObjectPool(wasm);
-    try {
-        const pScript = pool.encodeString('msg("hello world")');
-        console.log(decodePtrString(wasm.HEAP8, wasm._eval(pScript)));
-    } finally {
-        pool.dispose();
+    return function(...args) {
+        const pool = new ObjectPool(wasm);
+        try {
+            const pScript = pool.encodeString(`
+            const args = ${JSON.stringify(args)};
+            function f() {
+                ${script}
+            }
+            f.apply(undefined, args);
+            `);
+            const result = decodePtrString(wasm.HEAP8, wasm._eval(pScript));
+            if (result === 'undefined') {
+                return undefined;
+            }
+            return JSON.parse(result);
+        } finally {
+            pool.dispose();
+        }
     }
 }
 
