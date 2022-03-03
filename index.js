@@ -1,9 +1,14 @@
 module.exports = async function() {
     const wasm = require('./eval')();
     await wasm.ready;
+    Object.assign(wasm, {
+        CallBack() {
+            console.log('!!! called');
+        }
+    })
     const pool = new ObjectPool(wasm);
     try {
-        const pScript = pool.encodeString('msg() + msg()');
+        const pScript = pool.encodeString('msg("hello world")');
         console.log(decodePtrString(wasm.HEAP8, wasm._eval(pScript)));
     } finally {
         pool.dispose();

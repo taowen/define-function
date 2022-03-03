@@ -22,4 +22,4 @@ emcc \
     -s INCOMING_MODULE_JS_API=[] -s DYNAMIC_EXECUTION=0 \
     -s EXPORTED_FUNCTIONS=["_eval","_malloc","_free"] \
     --memory-init-file 0 \
-    -s AGGRESSIVE_VARIABLE_ELIMINATION=1 --closure 1
+    -s AGGRESSIVE_VARIABLE_ELIMINATION=1 --closure 0

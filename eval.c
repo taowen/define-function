@@ -2,8 +2,13 @@
 #include <string.h>
 #include "./quickjs/quickjs.h"
 
+EM_JS(void, js_CallBack, (), {
+    Module.CallBack();
+});
+
 JSValue qts_quickjs_to_c_callback(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv, int magic, JSValue *func_data) {
-  return JS_NewString(ctx, "hello");
+    js_CallBack();
+    return JS_DupValue(ctx, argv[0]);
 }
 
 // TODO: free result
