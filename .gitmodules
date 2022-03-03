@@ -1,0 +1,6 @@
+[submodule "quickjs"]
+	path = quickjs
+	url = https://github.com/bellard/quickjs.git
+[submodule "emsdk"]
+	path = emsdk
+	url = https://github.com/emscripten-core/emsdk.git
