@@ -1,3 +1,5 @@
+let nextId = 1;
+
 module.exports = async function(script) {
     const wasm = require('./eval')();
     await wasm.ready;
@@ -8,13 +10,25 @@ module.exports = async function(script) {
     })
     return function(...args) {
         const pool = new ObjectPool(wasm);
+        const key = `key${nextId}`;
+        wasm[key] = args;
         try {
             const pScript = pool.encodeString(`
-            const args = ${JSON.stringify(args)};
+            const args = ${JSON.stringify(args.map((arg, i) => typeof arg === 'function' ? {__f__:[key, i]} : arg))};
             function f() {
                 ${script}
             }
-            f.apply(undefined, args);
+            function decodeArg(arg) {
+                if (arg && arg.__f__) {
+                    return function(...args) {
+                        const [key, slot] = arg.__f__;
+                        invoke();
+                        return 'world';
+                    }
+                }
+                return arg;
+            }
+            f.apply(undefined, args.map(arg => decodeArg(arg)));
             `);
             const result = decodePtrString(wasm.HEAP8, wasm._eval(pScript));
             if (result === 'undefined') {

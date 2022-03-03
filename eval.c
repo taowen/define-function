@@ -19,7 +19,7 @@ const char* eval(char* str) {
     JSContext* ctx = JS_NewContext(runtime);
     JSValue global = JS_GetGlobalObject(ctx);
     JSValue func_obj = JS_NewCFunctionData(ctx, &qts_quickjs_to_c_callback, /* min argc */0, /* unused magic */0, /* func_data len */0, 0);
-    JS_SetPropertyStr(ctx, global, "msg", func_obj);
+    JS_SetPropertyStr(ctx, global, "invoke", func_obj);
     JSValue result = JS_Eval(ctx, str, strlen(str), "<eval>", JS_EVAL_TYPE_GLOBAL);
     if (JS_IsException(result)) {
         JSValue realException = JS_GetException(ctx);
