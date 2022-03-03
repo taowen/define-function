@@ -1,9 +1,8 @@
 async function test1() {
     const f = await require('./index')(`
-        const [hello, world] = arguments;
-        return hello + ', ' + world(100);
+        return arguments[0]();
     `);
-    console.log(f('hello', (i) => 'world~~~' + i));
+    console.log(f(() => 'hello'));
 }
 
 test1();

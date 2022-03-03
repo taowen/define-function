@@ -1,107 +1,106 @@
 let nextId = 1;
 
-module.exports = async function(script) {
+module.exports = async function (script) {
     const wasm = require('./eval')();
     await wasm.ready;
-    wasm.invoke = (encodedInvokeArgs) => {
-        const decodedInvokeArgs = JSON.parse(decodePtrString(wasm.HEAP8, encodedInvokeArgs));
-        return wasm[decodedInvokeArgs.key](decodedInvokeArgs);
+    wasm.dispatch = (encodedAction, encodedKey, encodedArgs) => {
+        const action = decodePtrString(wasm, encodedAction);
+        const key = decodePtrString(wasm, encodedKey);
+        const args = JSON.parse(decodePtrString(wasm, encodedArgs));
+        return wasm[key][action](args);
     }
-    return function(...args) {
-        const pool = new ObjectPool(wasm);
+    return function (...args) {
         const key = `key${nextId++}`;
-        wasm[key] = (invokeArgs) => {
-            const result = args[invokeArgs.slot](...invokeArgs.args);
-            return pool.encodeString(JSON.stringify(result));
+        let syncResult = undefined;
+        wasm[key] = {
+            invoke(invokeArgs) {
+                const result = args[invokeArgs.slot](...invokeArgs.args);
+                // eval.c dispatch will free this memory
+                return encodeString(wasm, JSON.stringify(result));
+            },
+            setSyncResult(result) {
+                syncResult = result;
+                return 0;
+            }
         };
-        try {
-            const pScript = pool.encodeString(`
-            const args = ${JSON.stringify(args.map((arg, i) => typeof arg === 'function' ? {__f__:[key, i]} : arg))};
+        const pScript = encodeString(wasm, `
+            const __key = '${key}';
+            const __args = ${JSON.stringify(args.map(arg => typeof arg === 'function' ? { __f__: true } : arg))};
             function f() {
                 ${script}
             }
-            function decodeArg(arg) {
+            function decodeArg(arg, i) {
+                // the argument is a function
                 if (arg && arg.__f__) {
                     return function(...args) {
-                        const [key, slot] = arg.__f__;
-                        return invoke(JSON.stringify({key, slot, args}));
+                        return __dispatch('invoke', __key, JSON.stringify({slot:i, args}));
                     }
                 }
                 return arg;
             }
-            f.apply(undefined, args.map(arg => decodeArg(arg)));
+            try {
+                const result = f.apply(undefined, __args.map((arg, i) => decodeArg(arg, i)));
+                __dispatch('setSyncResult', __key, JSON.stringify({ success: result }));
+            } catch(e) {
+                __dispatch('setSyncResult', __key, JSON.stringify({ failure: "" + e }));
+            }
             `);
-            const result = decodePtrString(wasm.HEAP8, wasm._eval(pScript));
-            if (result === 'undefined') {
-                return undefined;
+        try {
+            const pError = wasm._eval(pScript)
+            if (pError) {
+                throw new Error(decodePtrString(wasm, pError));
             }
-            return JSON.parse(result);
+            if (!syncResult) {
+                throw new Error('internal error: missing sync result');
+            }
+            if (syncResult.error) {
+                throw new Error(syncResult.error);
+            }
+            return syncResult.success;
         } finally {
-            pool.dispose();
             delete wasm[key];
+            wasm._free(pScript);
         }
     }
 }
 
-class ObjectPool {
-    wasm;
-    ptrs = [];
-
-    constructor(wasm) {
-        this.wasm = wasm;
-    }
-
-    encodeString(string) {
-        var octets = [];
-        var length = string.length;
-        var i = 0;
-        while (i < length) {
-            var codePoint = string.codePointAt(i);
-            var c = 0;
-            var bits = 0;
-            if (codePoint <= 0x0000007F) {
-                c = 0;
-                bits = 0x00;
-            } else if (codePoint <= 0x000007FF) {
-                c = 6;
-                bits = 0xC0;
-            } else if (codePoint <= 0x0000FFFF) {
-                c = 12;
-                bits = 0xE0;
-            } else if (codePoint <= 0x001FFFFF) {
-                c = 18;
-                bits = 0xF0;
-            }
-            octets.push(bits | (codePoint >> c));
+function encodeString(wasm, string) {
+    var octets = [];
+    var length = string.length;
+    var i = 0;
+    while (i < length) {
+        var codePoint = string.codePointAt(i);
+        var c = 0;
+        var bits = 0;
+        if (codePoint <= 0x0000007F) {
+            c = 0;
+            bits = 0x00;
+        } else if (codePoint <= 0x000007FF) {
+            c = 6;
+            bits = 0xC0;
+        } else if (codePoint <= 0x0000FFFF) {
+            c = 12;
+            bits = 0xE0;
+        } else if (codePoint <= 0x001FFFFF) {
+            c = 18;
+            bits = 0xF0;
+        }
+        octets.push(bits | (codePoint >> c));
+        c -= 6;
+        while (c >= 0) {
+            octets.push(0x80 | ((codePoint >> c) & 0x3F));
             c -= 6;
-            while (c >= 0) {
-                octets.push(0x80 | ((codePoint >> c) & 0x3F));
-                c -= 6;
-            }
-            i += codePoint >= 0x10000 ? 2 : 1;
         }
-        octets.push(0);
-        const ptr = this.malloc(octets.length);
-        this.wasm.HEAP8.set(octets, ptr);
-        return ptr;
+        i += codePoint >= 0x10000 ? 2 : 1;
     }
-
-    malloc(bytesCount) {
-        const ptr = this.wasm._malloc(bytesCount);
-        this.ptrs.push(ptr);
-        return ptr;
-    }
-
-    dispose() {
-        for (const ptr of this.ptrs) {
-            this.wasm._free(ptr);
-        }
-        this.ptrs.length = 0;
-    }
+    octets.push(0);
+    const ptr = wasm._malloc(octets.length);
+    wasm.HEAP8.set(octets, ptr);
+    return ptr;
 }
 
-function decodePtrString(HEAP8, ptr) {
-    const octets = HEAP8.subarray(ptr);
+function decodePtrString(wasm, ptr) {
+    const octets = wasm.HEAP8.subarray(ptr);
     var string = "";
     var i = 0;
     while (i < octets.length) {
