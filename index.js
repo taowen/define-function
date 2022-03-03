@@ -3,15 +3,17 @@ let nextId = 1;
 module.exports = async function(script) {
     const wasm = require('./eval')();
     await wasm.ready;
-    Object.assign(wasm, {
-        CallBack() {
-            console.log('!!! called');
-        }
-    })
+    wasm.invoke = (encodedInvokeArgs) => {
+        const decodedInvokeArgs = JSON.parse(decodePtrString(wasm.HEAP8, encodedInvokeArgs));
+        return wasm[decodedInvokeArgs.key](decodedInvokeArgs);
+    }
     return function(...args) {
         const pool = new ObjectPool(wasm);
-        const key = `key${nextId}`;
-        wasm[key] = args;
+        const key = `key${nextId++}`;
+        wasm[key] = (invokeArgs) => {
+            const result = args[invokeArgs.slot](...invokeArgs.args);
+            return pool.encodeString(JSON.stringify(result));
+        };
         try {
             const pScript = pool.encodeString(`
             const args = ${JSON.stringify(args.map((arg, i) => typeof arg === 'function' ? {__f__:[key, i]} : arg))};
@@ -22,8 +24,7 @@ module.exports = async function(script) {
                 if (arg && arg.__f__) {
                     return function(...args) {
                         const [key, slot] = arg.__f__;
-                        invoke();
-                        return 'world';
+                        return invoke(JSON.stringify({key, slot, args}));
                     }
                 }
                 return arg;
@@ -37,6 +38,7 @@ module.exports = async function(script) {
             return JSON.parse(result);
         } finally {
             pool.dispose();
+            delete wasm[key];
         }
     }
 }

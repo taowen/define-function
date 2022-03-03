@@ -2,13 +2,13 @@
 #include <string.h>
 #include "./quickjs/quickjs.h"
 
-EM_JS(void, js_CallBack, (), {
-    Module.CallBack();
+EM_JS(const char*, callbackJs, (const char* args), {
+    return Module.invoke(args);
 });
 
-JSValue qts_quickjs_to_c_callback(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv, int magic, JSValue *func_data) {
-    js_CallBack();
-    return JS_DupValue(ctx, argv[0]);
+JSValue invoke(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv, int magic, JSValue *func_data) {
+    const char* result = callbackJs(JS_ToCString(ctx, argv[0]));
+    return JS_ParseJSON(ctx, result, strlen(result), "");
 }
 
 // TODO: free result
@@ -18,7 +18,7 @@ const char* eval(char* str) {
     JSRuntime* runtime = JS_NewRuntime();
     JSContext* ctx = JS_NewContext(runtime);
     JSValue global = JS_GetGlobalObject(ctx);
-    JSValue func_obj = JS_NewCFunctionData(ctx, &qts_quickjs_to_c_callback, /* min argc */0, /* unused magic */0, /* func_data len */0, 0);
+    JSValue func_obj = JS_NewCFunctionData(ctx, &invoke, /* min argc */0, /* unused magic */0, /* func_data len */0, 0);
     JS_SetPropertyStr(ctx, global, "invoke", func_obj);
     JSValue result = JS_Eval(ctx, str, strlen(str), "<eval>", JS_EVAL_TYPE_GLOBAL);
     if (JS_IsException(result)) {
