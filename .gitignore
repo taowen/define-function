@@ -1,3 +1,4 @@
-*.wasm
-*.wasm.br
+eval.wasm
+eval.wasm.br
+eval.js
 .vscode

@@ -2,13 +2,9 @@
 #include <string.h>
 #include "./quickjs/quickjs.h"
 
-int main() {
-    return 0;
-}
-
 EMSCRIPTEN_KEEPALIVE
 const char* eval() {
-    const char* str = "return 'hello'";
+    const char* str = "let msg = 'hello'; msg";
     JSRuntime* runtime = JS_NewRuntime();
     JSContext* ctx = JS_NewContext(runtime);
     JSValue result = JS_Eval(ctx, str, strlen(str), "<eval>", JS_EVAL_TYPE_GLOBAL);
