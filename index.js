@@ -3,7 +3,7 @@ module.exports = async function() {
     await wasm.ready;
     const pool = new ObjectPool(wasm);
     try {
-        const pScript = pool.encodeString('let msg = "hello"; msg + " world"');
+        const pScript = pool.encodeString('msg');
         console.log(decodePtrString(wasm.HEAP8, wasm._eval(pScript)));
     } finally {
         pool.dispose();
