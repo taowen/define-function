@@ -20,6 +20,6 @@ emcc \
     -s GLOBAL_BASE=1024 -s TOTAL_STACK=2MB -s INITIAL_MEMORY=4MB \
     -s ALLOW_MEMORY_GROWTH=1 -s ALLOW_TABLE_GROWTH=1 \
     -s INCOMING_MODULE_JS_API=[] -s DYNAMIC_EXECUTION=0 \
-    -s EXPORTED_FUNCTIONS=["_eval"] \
+    -s EXPORTED_FUNCTIONS=["_eval","_malloc","_free"] \
     --memory-init-file 0 \
     -s AGGRESSIVE_VARIABLE_ELIMINATION=1 --closure 1

@@ -3,8 +3,7 @@
 #include "./quickjs/quickjs.h"
 
 EMSCRIPTEN_KEEPALIVE
-const char* eval() {
-    const char* str = "let msg = 'hello'; msg";
+const char* eval(char* str) {
     JSRuntime* runtime = JS_NewRuntime();
     JSContext* ctx = JS_NewContext(runtime);
     JSValue result = JS_Eval(ctx, str, strlen(str), "<eval>", JS_EVAL_TYPE_GLOBAL);
