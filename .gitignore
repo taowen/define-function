@@ -1,0 +1,3 @@
+*.wasm
+*.wasm.br
+.vscode

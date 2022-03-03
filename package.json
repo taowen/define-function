@@ -1,0 +1,9 @@
+{
+    "name": "define-function",
+    "version": "1.0.0",
+    "repository": "https://github.com/taowen/define-function",
+    "license": "MIT",
+    "files": [
+        "index.js"
+    ]
+}
