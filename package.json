@@ -11,11 +11,13 @@
         "webpack": "^5.69.1",
         "webpack-dev-server": "^4.7.4",
         "webpack-cli": "^4.9.2",
-        "html-webpack-plugin": "^5.5.0"
+        "html-webpack-plugin": "^5.5.0",
+        "typescript": "^4.6.2"
     },
     "scripts": {
         "test:browser": "webpack serve",
-        "test:node": "node test.node.js"
+        "test:node": "node test.node.js",
+        "test:ts": "tsc && mkdir test-ts/node_modules && cd test-ts/node_modules && ln -s ../../ define-function"
     },
     "files": [
         "index.node.js",

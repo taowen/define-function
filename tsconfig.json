@@ -1,0 +1,16 @@
+{
+    "compilerOptions": {
+      "composite": true,
+      "target": "esnext",
+      "useDefineForClassFields": true,
+      "module": "commonjs",
+      "moduleResolution": "node",
+      "strict": true,
+      "jsx": "react",
+      "sourceMap": true,
+      "resolveJsonModule": true,
+      "lib": ["esnext", "dom"],
+      "outDir": "test-ts"
+    },
+    "include": ["test.ts", "index.d.ts"]
+  }

@@ -16,4 +16,5 @@ module.exports = async function (script, options) {
     });
     return require('./define-function')(wasm, script, options);
 };
+module.exports.default = module.exports;
 `)

@@ -5,3 +5,4 @@ wechat
 .vscode
 index.browser.js
 node_modules
+test-ts
