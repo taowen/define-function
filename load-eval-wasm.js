@@ -145,7 +145,6 @@ var Module = (() => {
   }
   
   function initRuntime() {
-   runtimeInitialized = true;
    callRuntimeCallbacks(__ATINIT__);
   }
   

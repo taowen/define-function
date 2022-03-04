@@ -11,10 +11,6 @@ EM_JS(const char*, _setPromiseCallbacks, (const char* key, const char* promiseId
     return Module.setPromiseCallbacks(key, promiseId, resolve, reject);
 });
 
-EM_JS(void, js_log, (const char* msg), {
-    return Module.log(msg);
-});
-
 JSValue dispatch(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv, int magic, JSValue *func_data) {
     const char* action = JS_ToCString(ctx, argv[0]);
     const char* key = JS_ToCString(ctx, argv[1]);
