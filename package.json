@@ -3,11 +3,17 @@
     "version": "1.0.0",
     "repository": "https://github.com/taowen/define-function",
     "license": "MIT",
-    "miniprogram": ".",
+    "miniprogram": "wechat",
+    "main": "index.node.js",
+    "browser": "index.browser.js",
+    "types": "index.d.ts",
     "files": [
-        "index.js",
+        "index.node.js",
+        "index.browser.js",
+        "index.d.js",
+        "define-function.js",
         "load-eval-wasm.js",
         "eval.wasm",
-        "eval.wasm.br"
+        "wechat/*"
     ]
 }

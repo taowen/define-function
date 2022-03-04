@@ -24,3 +24,9 @@ emcc \
     --memory-init-file 0 \
     -s AGGRESSIVE_VARIABLE_ELIMINATION=1 --closure 0 --minify 0
 brotli -f eval.wasm
+rm -rf wechat
+mkdir wechat
+cp index.wechat.js wechat/index.js
+cp define-function.js wechat/define-function.js
+cp load-eval-wasm.js wechat/load-eval-wasm.js
+cp eval.wasm.br wechat/eval.wasm.br

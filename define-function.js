@@ -1,21 +1,22 @@
 let nextId = 1;
 
-module.exports = async function (script, options) {
-    const wasm = await require('./load-eval-wasm')({
-        async instantiateWasm(info, receiveInstance) {
-            if (typeof WXWebAssembly !== 'undefined') {
-                    const { instance, module } = await WXWebAssembly.instantiate(
-                        options?.wasmFile || '/miniprogram_npm/define-function/eval.wasm.br', info);
-                    receiveInstance(instance, module);
-            } else if(typeof window !== 'undefined') {
+module.exports = function (wasm, script, options) {
+    // const loader = await import('./load-eval-wasm.js');
+    // const wasm = await loader.default({
+    //     async instantiateWasm(info, receiveInstance) {
+    //         if (typeof WXWebAssembly !== 'undefined') {
+    //                 const { instance, module } = await WXWebAssembly.instantiate(
+    //                     options?.wasmFile || '/miniprogram_npm/define-function/eval.wasm.br', info);
+    //                 receiveInstance(instance, module);
+    //         } else if(typeof window !== 'undefined') {
 
-            } else {
-                const buff = require('fs').readFileSync(options?.wasmFile || './eval.wasm');
-                const { instance, module } = await WebAssembly.instantiate(buff, info);
-                receiveInstance(instance, module);
-            }
-        }
-    });
+    //         } else {
+    //             const buff = require('fs').readFileSync(options?.wasmFile || './eval.wasm');
+    //             const { instance, module } = await WebAssembly.instantiate(buff, info);
+    //             receiveInstance(instance, module);
+    //         }
+    //     }
+    // });
     wasm.dispatch = (encodedAction, encodedKey, encodedArgs) => {
         const action = decodePtrString(wasm, encodedAction);
         const key = decodePtrString(wasm, encodedKey);

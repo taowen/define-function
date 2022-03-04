@@ -1,4 +1,4 @@
-const def = require('./index')
+const def = require('./index.node')
 const assert = require('assert');
 
 async function test1() {
