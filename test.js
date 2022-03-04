@@ -37,6 +37,15 @@ async function test3() {
 
 async function test4() {
     const f = await def(`
+        return new Date().toString();
+    `)
+    if (typeof f() !== 'string') {
+        assert.fail();
+    }
+}
+
+async function test5() {
+    const f = await def(`
     const [print, sleep] = arguments;
     return (async() => {
         print('hello')
@@ -51,8 +60,8 @@ async function test4() {
 }
 
 async function main() {
-    await Promise.all([test1(), test2(), test3()])
-    await test4();
+    await Promise.all([test1(), test2(), test3(), test4()])
+    await test5();
 }
 
 main();

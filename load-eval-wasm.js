@@ -416,12 +416,6 @@ var Module = (() => {
   
   var calledRun;
   
-  function ExitStatus(status) {
-   this.name = "ExitStatus";
-   this.message = "Program terminated with exit(" + status + ")";
-   this.status = status;
-  }
-  
   dependenciesFulfilled = function runCaller() {
    if (!calledRun) run();
    if (!calledRun) dependenciesFulfilled = runCaller;
