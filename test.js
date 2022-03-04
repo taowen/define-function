@@ -1,9 +1,11 @@
+const def = require('./index')
+
 async function test1() {
     try {
-        const f = await require('./index')(`
+        const f = await def(`
             return (async () => {
                 await arguments[0]();
-                return 'hello';
+                return 'hello1';
             })()
         `);
         console.log('done', await f(async () => {
@@ -11,16 +13,31 @@ async function test1() {
         }, (s) => {
             console.log('!!! ' + s)
         }));
-    } catch(e) {
+    } catch (e) {
         console.log(e);
     }
 }
 
 async function test2() {
-    const f = await require('./index')(`
+    const f = await def(`
         return 'hello'
     `);
     console.log('done', f());
 }
 
-test1();
+async function test3() {
+    const f = await def(`
+    const [print, sleep] = arguments;
+    return (async() => {
+        print('hello')
+        await sleep(5000);
+        print('world')
+    })()
+    `)
+    f(
+        msg => console.log(msg),
+        milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds))
+    )
+}
+
+test3();
