@@ -7,6 +7,16 @@
     "main": "index.node.js",
     "browser": "index.browser.js",
     "types": "index.d.ts",
+    "devDependencies": {
+        "webpack": "^5.69.1",
+        "webpack-dev-server": "^4.7.4",
+        "webpack-cli": "^4.9.2",
+        "html-webpack-plugin": "^5.5.0"
+    },
+    "scripts": {
+        "test:browser": "webpack serve",
+        "test:node": "node test.node.js"
+    },
     "files": [
         "index.node.js",
         "index.browser.js",

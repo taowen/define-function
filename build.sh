@@ -30,3 +30,4 @@ cp index.wechat.js wechat/index.js
 cp define-function.js wechat/define-function.js
 cp load-eval-wasm.js wechat/load-eval-wasm.js
 cp eval.wasm.br wechat/eval.wasm.br
+./build.js

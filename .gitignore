@@ -3,3 +3,5 @@ eval.wasm.br
 eval.js
 wechat
 .vscode
+index.browser.js
+node_modules
