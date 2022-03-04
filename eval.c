@@ -60,8 +60,9 @@ JSContext* newContext() {
 
 EMSCRIPTEN_KEEPALIVE
 void freeContext(JSContext* ctx) {
-    JS_FreeRuntime(JS_GetRuntime(ctx));
+    JSRuntime* runtime = JS_GetRuntime(ctx);
     JS_FreeContext(ctx);
+    JS_FreeRuntime(runtime);
 }
 
 EMSCRIPTEN_KEEPALIVE
@@ -69,6 +70,7 @@ const char* eval(JSContext* ctx, char* str) {
     JSValue global = JS_GetGlobalObject(ctx);
     JSValue dispatchFunc = JS_NewCFunctionData(ctx, &dispatch, /* min argc */0, /* unused magic */0, /* func_data len */0, 0);
     JS_SetPropertyStr(ctx, global, "__dispatch", dispatchFunc);
+    JS_FreeValue(ctx, global);
     JSValue result = JS_Eval(ctx, str, strlen(str), "<eval>", JS_EVAL_TYPE_GLOBAL);
     if (JS_IsException(result)) {
 		JSValue realException = JS_GetException(ctx);
@@ -95,4 +97,12 @@ const char* call(JSContext* ctx, JSValue* pFunc, const char* args) {
     JS_FreeValue(ctx, result);
     js_std_loop(ctx);
     return 0;
+}
+
+
+EMSCRIPTEN_KEEPALIVE
+void freeJsValue(JSContext* ctx, JSValue* pVal) {
+    if (pVal) {
+        JS_FreeValue(ctx, *pVal);
+    }
 }

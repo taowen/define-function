@@ -32,14 +32,22 @@ module.exports = async function (script, options) {
             if (!wasm[key]) {
                 return; // already disposed
             }
+            for (const { resolveFunc, rejectFunc } of Object.values(callbacks)) {
+                if (resolveFunc) {
+                    wasm._freeJsValue(ctx, resolveFunc);
+                }
+                if (rejectFunc) {
+                    wasm._freeJsValue(ctx, rejectFunc);
+                }
+            }
             wasm._free(pScript);
-            // wasm._freeContext(ctx); // TODO: fix memory leak
+            wasm._freeContext(ctx);
             wasm[key] = undefined;
         }
         const asyncResult = new Promise((resolve, reject) => {
             resolveAsyncResult = resolve;
             rejectAsyncResult = reject;
-        }).finally(dispose);
+        }).finally(dispose).catch(() => {});
         let syncResult = () => {
             return Promise.race([asyncResult, (async () => {
                 if (options?.timeout) {
@@ -60,20 +68,36 @@ module.exports = async function (script, options) {
                     const promiseId = `p${nextId++}`;
                     const callback = callbacks[promiseId] = {
                         promise: invokeResult,
-                        rejectFunc: undefined, // will be filled by setPromiseCallbacks
-                        resolveFunc: undefined, // will be filled by setPromiseCallbacks
+                        rejectFunc: 0, // will be filled by setPromiseCallbacks
+                        resolveFunc: 0, // will be filled by setPromiseCallbacks
                     };
                     invokeResult
                         .then(v => {
+                            if (!callback.resolveFunc) {
+                                return;
+                            }
                             const pError = wasm._call(ctx, callback.resolveFunc, encodeString(wasm, JSON.stringify(v)));
                             if (pError) {
                                 this.setFailure(decodePtrString(wasm, pError));
+                            } else {
+                                wasm._freeJsValue(ctx, callback.resolveFunc);
+                                callback.resolveFunc = 0;
+                                wasm._freeJsValue(ctx, callback.rejectFunc);
+                                callback.rejectFunc = 0;
                             }
                         })
                         .catch(e => {
+                            if (!callback.rejectFunc) {
+                                return;
+                            }
                             const pError = wasm._call(ctx, callback.rejectFunc, encodeString(wasm, '' + e));
                             if (pError) {
                                 this.setFailure(decodePtrString(wasm, pError));
+                            } else {
+                                wasm._freeJsValue(ctx, callback.resolveFunc);
+                                callback.resolveFunc = 0;
+                                wasm._freeJsValue(ctx, callback.rejectFunc);
+                                callback.rejectFunc = 0;
                             }
                         });
                     return encodeString(wasm, promiseId);

@@ -1,31 +1,41 @@
 const def = require('./index')
+const assert = require('assert');
 
 async function test1() {
-    try {
-        const f = await def(`
-            return (async () => {
-                await arguments[0]();
-                return 'hello1';
-            })()
-        `);
-        console.log('done', await f(async () => {
-            await new Promise(resolve => setTimeout(resolve, 1000));
-        }, (s) => {
-            console.log('!!! ' + s)
-        }));
-    } catch (e) {
-        console.log(e);
+    const f = await def(`
+    return 'hello';
+    `)
+    if (f() !== 'hello') {
+        assert.fail()
     }
 }
 
 async function test2() {
     const f = await def(`
-        return 'hello'
-    `);
-    console.log('done', f());
+    throw 'hello';
+    `)
+    let ex;
+    try {
+        f()
+    } catch (e) {
+        ex = e;
+    }
+    if (!ex) {
+        assert.fail();
+    }
 }
 
 async function test3() {
+    const f = await def(`
+    const [hello, world] = arguments;
+    return hello + ' ' + world;
+    `)
+    if (f('hello', 'world') !== 'hello world') {
+        assert.fail();
+    }
+}
+
+async function test4() {
     const f = await def(`
     const [print, sleep] = arguments;
     return (async() => {
@@ -34,10 +44,15 @@ async function test3() {
         print('world')
     })()
     `)
-    f(
+    await f(
         msg => console.log(msg),
         milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds))
     )
 }
 
-test3();
+async function main() {
+    await Promise.all([test1(), test2(), test3()])
+    await test4();
+}
+
+main();

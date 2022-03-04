@@ -187,12 +187,11 @@ var Module = (() => {
   Module["preloadedAudios"] = {};
   
   function abort(what) {
-   what = "Aborted(" + what + ")";
-   err(what);
+    what = "Aborted(" + what + ")";
    ABORT = true;
    EXITSTATUS = 1;
    what += ". Build with -s ASSERTIONS=1 for more info.";
-   var e = new WebAssembly.RuntimeError(what);
+   var e = new Error(what);
    readyPromiseReject(e);
    throw e;
   }
@@ -409,6 +408,10 @@ var Module = (() => {
   
   var _call = Module["_call"] = function() {
    return (_call = Module["_call"] = Module["asm"]["r"]).apply(null, arguments);
+  };
+  
+  var _freeJsValue = Module["_freeJsValue"] = function() {
+    return (_freeJsValue = Module["_freeJsValue"] = Module["asm"]["s"]).apply(null, arguments);
   };
   
   var calledRun;
