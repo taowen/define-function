@@ -57,16 +57,37 @@ const [print, sleep] = arguments;
 (async() => {
     print('hello')
     await sleep(1000);
-    print('hello')
-})()
+    print('world')
+})();
 `)
-f((msg) => {
-    console.log(msg)
-}, (milliseconds) => {
-    return new Promise(resolve => setTimeout(resolve, milliseconds))
-}) 
-// 'hello' 
-// 'world
+f(
+    msg => console.log(msg),
+    milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds))
+) 
+// hello
+// world
+```
+
+can return promise back to host
+
+```js
+const def = require('define-function')
+const f = await def(`
+const [print, sleep] = arguments;
+return (async() => {
+    print('hello')
+    await sleep(1000);
+    print('world')
+})();
+`)
+await f(
+    msg => console.log(msg),
+    milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds))
+)
+console.log('done')
+// hello
+// world
+// done
 ```
 
 # Limit
