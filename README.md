@@ -62,3 +62,16 @@ f((msg) => {
 // 'hello' 
 // 'world
 ```
+
+# Limit
+
+* function argument does not support Set/Map/Class or anything that can not survive JSON.parse(JSON.stringify), except the argument is a function
+* function return value does not support Set/Map/Class or anything that can not survive JSON.parse(JSON.stringify), except promise object
+* JSON.stringify and JSON.parse takes time, so the arguments and return value should be as small as possible for best performance
+
+# Similar projects
+
+* https://github.com/justjake/quickjs-emscripten/
+* https://github.com/maple3142/wasm-jseval
+
+define-function has a simpler API and support async/await
