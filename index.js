@@ -1,8 +1,13 @@
 let nextId = 1;
 
 module.exports = async function (script, options) {
-    const wasm = require('./eval')();
-    await wasm.ready;
+    const wasm = await require('./load-eval-wasm')({
+        async instantiateWasm(info, receiveInstance) {
+            const buff = require('fs').readFileSync('./eval.wasm');
+            const { instance, module } = await WebAssembly.instantiate(buff, info);
+            receiveInstance(instance, module);
+        }
+    });
     wasm.log = (encodedMsg) => {
         console.log(decodePtrString(wasm, encodedMsg));
     }
