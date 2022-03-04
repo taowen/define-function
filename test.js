@@ -30,7 +30,7 @@ async function test3() {
     const [print, sleep] = arguments;
     return (async() => {
         print('hello')
-        await sleep(5000);
+        await sleep(1000);
         print('world')
     })()
     `)

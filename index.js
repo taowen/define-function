@@ -101,7 +101,7 @@ module.exports = async function (script, options) {
             const __key = '${key}';
             const __args = ${JSON.stringify(args.map(arg => typeof arg === 'function' ? { __f__: true } : arg))};
             function dispatch(action, args) {
-                __dispatch(action, __key, JSON.stringify(args));
+                return __dispatch(action, __key, JSON.stringify(args));
             }
             function decodeArg(arg, i) {
                 // the argument is a function
