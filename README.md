@@ -1,10 +1,16 @@
 # About
 
-quick.js based eval
+[quick.js](https://bellard.org/quickjs/) based eval
 
 ```
 npm install define-function
 ```
+
+works in
+
+* node
+* browser
+* wechat miniprogram
 
 # Usage
 
