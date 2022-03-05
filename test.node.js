@@ -60,7 +60,8 @@ async function test5() {
 }
 
 async function test6() {
-    const ctx = def.context();
+    const { context } = require('./index.node');
+    const ctx = context();
     const f = await ctx.def(`
     global.counter = (global.counter || 0)+1;
     return counter;

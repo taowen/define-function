@@ -93,8 +93,8 @@ console.log('done')
 share context between multiple invocations
 
 ```js
-const def = require('define-function')
-const ctx = def.context()
+const { context } = require('define-function')
+const ctx = context()
 const f = await ctx.def(`
     global.counter = (global.counter || 0)+1;
     return counter; // counter can be referenced globally
