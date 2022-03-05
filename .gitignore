@@ -1,7 +1,7 @@
-eval.wasm
-eval.wasm.br
-eval.js
-wechat
 .vscode
-index.browser.js
-node_modules
+/eval.wasm
+/eval.wasm.br
+/eval.js
+/wechat
+/index.browser.js
+/node_modules
