@@ -284,17 +284,24 @@ module.exports = function (wasmProvider) {
         return (...args) => { // start a isolated context for each invocation
             const ctx = new Context(options);
             const f = ctx.def(script, options);
-            const result = f(...args);
-            (async () => {
-                try {
-                    await result;
-                } catch(e) {
-                    // ignore
-                } finally {
+            let result = undefined;
+            try {
+                return result = f(...args);
+            } finally {
+                if (result && result.then) {
+                    (async () => {
+                        try {
+                            await result;
+                        } catch(e) {
+                            // ignore
+                        } finally {
+                            ctx.dispose();
+                        }
+                    })();
+                } else {
                     ctx.dispose();
                 }
-            })();
-            return result;
+            }
         };
     };
     defineFunction.context = (options) => { // share context between invocations
