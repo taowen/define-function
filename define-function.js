@@ -204,6 +204,12 @@ module.exports = function (wasmProvider) {
                 const promiseId = wasm.UTF8ToString(encodedPromiseId);
                 return invocations[key]['setPromiseCallbacks']({ promiseId, resolveFunc, rejectFunc });
             }
+            wasm.dynamicImport = (ctx, argc, argv, basename, filename) => {
+                console.log(wasm.UTF8ToString(basename), wasm.UTF8ToString(filename));
+            }
+            wasm.getModuleContent = (ctx, filename) => {
+                console.log(wasm.UTF8ToString(filename));
+            }
         }
         return wasm;
     }
@@ -224,12 +230,12 @@ module.exports = function (wasmProvider) {
             }
         };
     };
-    defineFunction.context = (options) => { // share context between invocations
+    defineFunction.context = (contextOptions) => { // share context between invocations
         let ctx = undefined;
         return {
             async def(script, options) {
                 if (!ctx) {
-                    await loadWasm(options);
+                    await loadWasm(contextOptions);
                     ctx = new Context(options);
                 }
                 return ctx.def(script, options);

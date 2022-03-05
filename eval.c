@@ -11,11 +11,19 @@ EM_JS(const char*, _setPromiseCallbacks, (const char* key, const char* promiseId
     return Module.setPromiseCallbacks(key, promiseId, resolve, reject);
 });
 
+EM_JS(void, _dynamicImport, (JSContext *ctx, int argc, JSValueConst *argv, const char* basename, const char* filename), {
+    return Module.dynamicImport(ctx, argc, argv, basename, filename);
+});
+
+EM_JS(void, _getModuleContent, (JSContext *ctx, const char* filename), {
+    return Module.getModuleContent(ctx, filename);
+});
+
 JSValue dispatch(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv, int magic, JSValue *func_data) {
     const char* action = JS_ToCString(ctx, argv[0]);
     const char* key = JS_ToCString(ctx, argv[1]);
     const char* result = _dispatch(action, key, JS_ToCString(ctx, argv[2]));
-    if (result == 0) {
+    if (result == NULL) {
         return JS_UNDEFINED;
     }
     if (result[0] == 'p') { // is promise
@@ -47,9 +55,27 @@ void js_std_loop(JSContext *ctx)
     }
 }
 
+JSModuleDef *js_module_loader(JSContext *ctx,
+                              const char *module_name, void *opaque)
+{
+    JSModuleDef *m;
+    JSValue func_val;
+    const char* buf = "export default 'hello'";
+    _getModuleContent(ctx, module_name);
+    func_val = JS_Eval(ctx, (char *)buf, strlen(buf), module_name,
+                        JS_EVAL_TYPE_MODULE | JS_EVAL_FLAG_COMPILE_ONLY);
+    if (JS_IsException(func_val))
+        return NULL;
+    /* the module is already referenced, so we must free it */
+    m = JS_VALUE_GET_PTR(func_val);
+    JS_FreeValue(ctx, func_val);
+    return m;
+}
+
 EMSCRIPTEN_KEEPALIVE
 JSContext* newContext() {
     JSRuntime* runtime = JS_NewRuntime();
+    JS_SetModuleLoaderFunc(runtime, NULL, js_module_loader, NULL);
     JSContext* ctx = JS_NewContext(runtime);
     return ctx;
 }
@@ -59,6 +85,15 @@ void freeContext(JSContext* ctx) {
     JSRuntime* runtime = JS_GetRuntime(ctx);
     JS_FreeContext(ctx);
     JS_FreeRuntime(runtime);
+}
+
+// override quickjs.c definition to make it async
+JSValue js_dynamic_import_job(JSContext *ctx, int argc, JSValueConst *argv);
+JSValue async_js_dynamic_import_job(JSContext *ctx, int argc, JSValueConst *argv) {
+    JSValueConst basename = argv[2];
+    JSValueConst filename = argv[3];
+    _dynamicImport(ctx, argc, argv, JS_ToCString(ctx, basename), JS_ToCString(ctx, filename));
+    return js_dynamic_import_job(ctx, argc, argv);
 }
 
 EMSCRIPTEN_KEEPALIVE

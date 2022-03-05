@@ -3,6 +3,10 @@
 source ./emsdk/emsdk_env.sh --build=Release
 # emsdk install latest
 # emsdk activate latest
+pushd quickjs
+git reset --hard HEAD
+git apply ../quickjs.patch
+popd
 emcc \
     eval.c \
     quickjs/quickjs.c \

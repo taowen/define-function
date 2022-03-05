@@ -7,6 +7,8 @@ declare interface Context {
   dispose(): void;
 }
 declare namespace defineFunction {
-    var context: () => Context;
+    var context: (options?: {
+      wasmFile?: string,
+    }) => Context;
 }
 export default defineFunction;

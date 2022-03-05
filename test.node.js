@@ -78,9 +78,23 @@ async function test6() {
     ctx.dispose();
 }
 
+async function test7() {
+    const f = await def(`
+    return (async() => {
+        return await import('sideFile.js');
+    })()
+    `, {
+        async dynamicImport(filename) {
+            console.log('!!!');
+        }
+    })
+    console.log(await f());
+}
+
 async function main() {
-    await Promise.all([test1(), test2(), test3(), test4(), test6()])
-    await test5();
+    // await Promise.all([test1(), test2(), test3(), test4(), test6()])
+    // await test5();
+    await test7();
 }
 
 main();
