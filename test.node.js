@@ -59,9 +59,21 @@ async function test5() {
     )
 }
 
+async function test6() {
+    const ctx = def.context();
+    const f = await ctx.def(`
+    return 'hello';
+    `)
+    if (f() !== 'hello') {
+        assert.fail()
+    }
+    ctx.dispose();
+}
+
 async function main() {
-    await Promise.all([test1(), test2(), test3(), test4()])
-    await test5();
+    // await Promise.all([test1(), test2(), test3(), test4()])
+    // await test5();
+    test6();
 }
 
 main();

@@ -10,7 +10,7 @@
       "sourceMap": true,
       "resolveJsonModule": true,
       "lib": ["esnext", "dom"],
-      "outDir": "test-ts"
+      "outDir": "lib"
     },
-    "include": ["test.ts", "index.d.ts"]
+    "include": ["test.ts"]
   }

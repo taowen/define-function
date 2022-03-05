@@ -17,7 +17,7 @@
     "scripts": {
         "test:browser": "webpack serve",
         "test:node": "node test.node.js",
-        "test:ts": "tsc && mkdir test-ts/node_modules && cd test-ts/node_modules && ln -s ../../ define-function"
+        "test:ts": "cd test-ts && tsc"
     },
     "files": [
         "index.node.js",
