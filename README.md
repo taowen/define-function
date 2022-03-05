@@ -1,6 +1,6 @@
 # About
 
-[quick.js](https://bellard.org/quickjs/) based eval
+[quick.js](https://bellard.org/quickjs/) based sandbox
 
 ```
 npm install define-function
