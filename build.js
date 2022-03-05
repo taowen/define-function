@@ -2,8 +2,8 @@
 
 const evalWasm = require('fs').readFileSync('./eval.wasm').toString('base64');
 require('fs').writeFileSync('index.browser.js', `
-module.exports = async function (script, options) {
-    const wasm = await require('./load-eval-wasm')({
+function loadWasm(options) {
+    return require('./load-eval-wasm')({
         async instantiateWasm(info, receiveInstance) {
             const evalWasm = atob('${evalWasm}');
             var bytes = new Uint8Array(evalWasm.length);
@@ -14,7 +14,6 @@ module.exports = async function (script, options) {
             receiveInstance(instance, module);
         }
     });
-    return require('./define-function')(wasm, script, options);
-};
-module.exports.default = module.exports;
+}
+module.exports = require('./define-function')(loadWasm);
 `)

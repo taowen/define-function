@@ -66,6 +66,7 @@ const char* eval(JSContext* ctx, char* str) {
     JSValue global = JS_GetGlobalObject(ctx);
     JSValue dispatchFunc = JS_NewCFunctionData(ctx, &dispatch, /* min argc */0, /* unused magic */0, /* func_data len */0, 0);
     JS_SetPropertyStr(ctx, global, "__dispatch", dispatchFunc);
+    JS_SetPropertyStr(ctx, global, "global", JS_GetGlobalObject(ctx));
     JS_FreeValue(ctx, global);
     JSValue result = JS_Eval(ctx, str, strlen(str), "<eval>", JS_EVAL_TYPE_GLOBAL);
     if (JS_IsException(result)) {

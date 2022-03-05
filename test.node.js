@@ -62,18 +62,24 @@ async function test5() {
 async function test6() {
     const ctx = def.context();
     const f = await ctx.def(`
-    return 'hello';
+    global.counter = (global.counter || 0)+1;
+    return counter;
     `)
-    if (f() !== 'hello') {
+    if (f() !== 1) {
+        assert.fail()
+    }
+    if (f() !== 2) {
+        assert.fail()
+    }
+    if (f() !== 3) {
         assert.fail()
     }
     ctx.dispose();
 }
 
 async function main() {
-    // await Promise.all([test1(), test2(), test3(), test4()])
-    // await test5();
-    test6();
+    await Promise.all([test1(), test2(), test3(), test4(), test6()])
+    await test5();
 }
 
 main();
