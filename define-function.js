@@ -35,7 +35,7 @@ class Context {
                 throw new Error('context has been disposed');
             }
             const key = `key${nextId++}`;
-            const pScript = encodeString(wasm, `
+            const pScript = encodeString(`
             (() => {
                 const __key = '${key}';
                 const __args = ${JSON.stringify(args.map(arg => typeof arg === 'function' ? { __f__: true } : arg))};
@@ -71,7 +71,7 @@ class Context {
             const invocation = invocations[key] = new Invocation({ args, callbacks: this.callbacks, ctx: this.ctx}, options?.timeout);
             const pError = wasm._eval(this.ctx, pScript);
             if (pError) {
-                throw new Error(decodePtrString(wasm, pError));
+                throw new Error(wasm.UTF8ToString(pError));
             }
             (async () => {
                 try {
@@ -133,9 +133,9 @@ class Invocation {
                     if (!callback.resolveFunc) {
                         return;
                     }
-                    const pError = wasm._call(this.ctx, callback.resolveFunc, encodeString(wasm, JSON.stringify(v)));
+                    const pError = wasm._call(this.ctx, callback.resolveFunc, encodeString(JSON.stringify(v)));
                     if (pError) {
-                        this.setFailure(decodePtrString(wasm, pError));
+                        this.setFailure(wasm.UTF8ToString(pError));
                     } else {
                         wasm._freeJsValue(this.ctx, callback.resolveFunc);
                         callback.resolveFunc = 0;
@@ -147,9 +147,9 @@ class Invocation {
                     if (!callback.rejectFunc) {
                         return;
                     }
-                    const pError = wasm._call(this.ctx, callback.rejectFunc, encodeString(wasm, '' + e));
+                    const pError = wasm._call(this.ctx, callback.rejectFunc, encodeString('' + e));
                     if (pError) {
-                        this.setFailure(decodePtrString(wasm, pError));
+                        this.setFailure(wasm.UTF8ToString(pError));
                     } else {
                         wasm._freeJsValue(this.ctx, callback.resolveFunc);
                         callback.resolveFunc = 0;
@@ -157,10 +157,10 @@ class Invocation {
                         callback.rejectFunc = 0;
                     }
                 });
-            return encodeString(wasm, promiseId);
+            return encodeString(promiseId);
         }
         // eval.c dispatch will free this memory
-        return encodeString(wasm, JSON.stringify(invokeResult));
+        return encodeString(JSON.stringify(invokeResult));
     }
 
     setPromiseCallbacks({ promiseId, rejectFunc, resolveFunc }) {
@@ -182,83 +182,11 @@ class Invocation {
     }
 }
 
-function encodeString(wasm, string) {
+function encodeString(string) {
     if (string === undefined) {
-        return undefined;
+        return 0;
     }
-    var octets = [];
-    var length = string.length;
-    var i = 0;
-    while (i < length) {
-        var codePoint = string.codePointAt(i);
-        var c = 0;
-        var bits = 0;
-        if (codePoint <= 0x0000007F) {
-            c = 0;
-            bits = 0x00;
-        } else if (codePoint <= 0x000007FF) {
-            c = 6;
-            bits = 0xC0;
-        } else if (codePoint <= 0x0000FFFF) {
-            c = 12;
-            bits = 0xE0;
-        } else if (codePoint <= 0x001FFFFF) {
-            c = 18;
-            bits = 0xF0;
-        }
-        octets.push(bits | (codePoint >> c));
-        c -= 6;
-        while (c >= 0) {
-            octets.push(0x80 | ((codePoint >> c) & 0x3F));
-            c -= 6;
-        }
-        i += codePoint >= 0x10000 ? 2 : 1;
-    }
-    octets.push(0);
-    const ptr = wasm._malloc(octets.length);
-    wasm.HEAP8.set(octets, ptr);
-    return ptr;
-}
-
-function decodePtrString(wasm, ptr) {
-    const octets = wasm.HEAP8.subarray(ptr);
-    var string = "";
-    var i = 0;
-    while (i < octets.length) {
-        var octet = octets[i];
-        var bytesNeeded = 0;
-        var codePoint = 0;
-        if (octet <= 0x7F) {
-            bytesNeeded = 0;
-            codePoint = octet & 0xFF;
-        } else if (octet <= 0xDF) {
-            bytesNeeded = 1;
-            codePoint = octet & 0x1F;
-        } else if (octet <= 0xEF) {
-            bytesNeeded = 2;
-            codePoint = octet & 0x0F;
-        } else if (octet <= 0xF4) {
-            bytesNeeded = 3;
-            codePoint = octet & 0x07;
-        }
-        if (octets.length - i - bytesNeeded > 0) {
-            var k = 0;
-            while (k < bytesNeeded) {
-                octet = octets[i + k + 1];
-                codePoint = (codePoint << 6) | (octet & 0x3F);
-                k += 1;
-            }
-        } else {
-            codePoint = 0xFFFD;
-            bytesNeeded = octets.length - i;
-        }
-        if (codePoint === 0) {
-            break;
-        }
-        string += String.fromCodePoint(codePoint);
-        i += bytesNeeded + 1;
-    }
-    return string
+    return wasm.allocateUTF8(string);
 }
 
 module.exports = function (wasmProvider) {
@@ -266,14 +194,14 @@ module.exports = function (wasmProvider) {
         if (!wasm) {
             wasm = await wasmProvider(options);
             wasm.dispatch = (encodedAction, encodedKey, encodedArgs) => {
-                const action = decodePtrString(wasm, encodedAction);
-                const key = decodePtrString(wasm, encodedKey);
-                const args = decodePtrString(wasm, encodedArgs);
+                const action = wasm.UTF8ToString(encodedAction);
+                const key = wasm.UTF8ToString(encodedKey);
+                const args = wasm.UTF8ToString(encodedArgs);
                 return invocations[key][action](args === 'undefined' ? undefined : JSON.parse(args));
             }
             wasm.setPromiseCallbacks = (encodedKey, encodedPromiseId, resolveFunc, rejectFunc) => {
-                const key = decodePtrString(wasm, encodedKey);
-                const promiseId = decodePtrString(wasm, encodedPromiseId);
+                const key = wasm.UTF8ToString(encodedKey);
+                const promiseId = wasm.UTF8ToString(encodedPromiseId);
                 return invocations[key]['setPromiseCallbacks']({ promiseId, resolveFunc, rejectFunc });
             }
         }

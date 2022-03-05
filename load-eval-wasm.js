@@ -412,6 +412,9 @@ var Module = (() => {
   var _freeJsValue = Module["_freeJsValue"] = function() {
     return (_freeJsValue = Module["_freeJsValue"] = Module["asm"]["s"]).apply(null, arguments);
   };
+
+  Module["UTF8ToString"] = UTF8ToString;
+  Module["allocateUTF8"] = allocateUTF8;
   
   var calledRun;
   
