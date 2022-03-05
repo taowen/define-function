@@ -288,16 +288,8 @@ module.exports = function (wasmProvider) {
             try {
                 return result = f(...args);
             } finally {
-                if (result && result.then) {
-                    (async () => {
-                        try {
-                            await result;
-                        } catch(e) {
-                            // ignore
-                        } finally {
-                            ctx.dispose();
-                        }
-                    })();
+                if (result && result.finally) {
+                    result.finally(ctx.dispose.bind(ctx));
                 } else {
                     ctx.dispose();
                 }
