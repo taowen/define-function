@@ -6,7 +6,7 @@
 npm install define-function
 ```
 
-works in
+works in any WebAssembly environment
 
 * node
 * browser
