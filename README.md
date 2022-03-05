@@ -19,7 +19,7 @@ define a function dynamically with javascript source code
 ```js
 const def = require('define-function')
 const f = await def(`
-return 'hello';
+    return 'hello';
 `)
 f() // 'hello'
 ```
@@ -29,8 +29,8 @@ function can have argument
 ```js
 const def = require('define-function')
 const f = await def(`
-const [hello, world] = arguments;
-return hello + ' ' + world;
+    const [hello, world] = arguments;
+    return hello + ' ' + world;
 `)
 f('hello', 'world') // 'hello world'
 ```
@@ -40,8 +40,8 @@ argument can be function
 ```js
 const def = require('define-function')
 const f = await def(`
-const [print] = arguments;
-print('hello')
+    const [print] = arguments;
+    print('hello')
 `)
 f((msg) => {
     console.log(msg)
@@ -53,12 +53,12 @@ argument can be async function
 ```js
 const def = require('define-function')
 const f = await def(`
-const [print, sleep] = arguments;
-(async() => {
-    print('hello')
-    await sleep(1000);
-    print('world')
-})();
+    const [print, sleep] = arguments;
+    (async() => {
+        print('hello')
+        await sleep(1000);
+        print('world')
+    })();
 `)
 f(
     msg => console.log(msg),
@@ -73,12 +73,12 @@ can return promise back to host
 ```js
 const def = require('define-function')
 const f = await def(`
-const [print, sleep] = arguments;
-return (async() => {
-    print('hello')
-    await sleep(1000);
-    print('world')
-})();
+    const [print, sleep] = arguments;
+    return (async() => {
+        print('hello')
+        await sleep(1000);
+        print('world')
+    })();
 `)
 await f(
     msg => console.log(msg),
@@ -88,6 +88,21 @@ console.log('done')
 // hello
 // world
 // done
+```
+
+share context between multiple invocations
+
+```js
+const def = require('define-function')
+const ctx = def.context()
+const f = await ctx.def(`
+    global.counter = (global.counter || 0)+1;
+    return counter; // counter can be referenced globally
+`)
+f() // 1
+f() // 2
+f() // 3
+ctx.dispose()
 ```
 
 # Limit
