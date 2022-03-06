@@ -204,7 +204,7 @@ var Module = (() => {
     Module["asm"] = exports;
     wasmMemory = Module["asm"]["m"];
     updateGlobalBufferAndViews(wasmMemory.buffer);
-    wasmTable = Module["asm"]["v"];
+    wasmTable = Module["asm"]["q"];
     addOnInit(Module["asm"]["n"]);
     removeRunDependency("wasm-instantiate");
    }
@@ -225,8 +225,8 @@ var Module = (() => {
    return Module.dispatch(action, key, args);
   }
 
-  function _dynamicImport(ctx, argc, argv, basename, filename) {
-    return Module.dynamicImport(ctx, argc, argv, basename, filename);
+  function _dynamicImport(ctx, argc, argv, resolveFunc, rejectFunc, basename, filename) {
+    return Module.dynamicImport(ctx, argc, argv, resolveFunc, rejectFunc, basename, filename);
   }
 
   function _getModuleContent(ctx, module_name) {
@@ -376,15 +376,15 @@ var Module = (() => {
 
   var asmLibraryArg = {
     "a": ___assert_fail,
-    "l": _dispatch,
+    "k": _dispatch,
     "h": _dynamicImport,
     "i": _getModuleContent,
     "e": __localtime_js,
-    "k": _setPromiseCallbacks,
+    "j": _setPromiseCallbacks,
     "f": __tzset_js,
     "b": _abort,
     "g": _emscripten_memcpy_big,
-    "j": _emscripten_resize_heap,
+    "l": _emscripten_resize_heap,
     "d": _fd_write,
     "c": _gettimeofday
    };
@@ -404,23 +404,27 @@ var Module = (() => {
    };
    
    var _newContext = Module["_newContext"] = function() {
-    return (_newContext = Module["_newContext"] = Module["asm"]["q"]).apply(null, arguments);
+    return (_newContext = Module["_newContext"] = Module["asm"]["r"]).apply(null, arguments);
    };
    
    var _freeContext = Module["_freeContext"] = function() {
-    return (_freeContext = Module["_freeContext"] = Module["asm"]["r"]).apply(null, arguments);
+    return (_freeContext = Module["_freeContext"] = Module["asm"]["s"]).apply(null, arguments);
+   };
+   
+   var _doDynamicImport = Module["_doDynamicImport"] = function() {
+    return (_doDynamicImport = Module["_doDynamicImport"] = Module["asm"]["t"]).apply(null, arguments);
    };
    
    var _eval = Module["_eval"] = function() {
-    return (_eval = Module["_eval"] = Module["asm"]["s"]).apply(null, arguments);
+    return (_eval = Module["_eval"] = Module["asm"]["u"]).apply(null, arguments);
    };
    
    var _call = Module["_call"] = function() {
-    return (_call = Module["_call"] = Module["asm"]["t"]).apply(null, arguments);
+    return (_call = Module["_call"] = Module["asm"]["v"]).apply(null, arguments);
    };
    
    var _freeJsValue = Module["_freeJsValue"] = function() {
-    return (_freeJsValue = Module["_freeJsValue"] = Module["asm"]["u"]).apply(null, arguments);
+    return (_freeJsValue = Module["_freeJsValue"] = Module["asm"]["w"]).apply(null, arguments);
    };
 
   Module["UTF8ToString"] = UTF8ToString;

@@ -1,13 +1,18 @@
 let wasm = undefined;
 let nextId = 1;
+const contexts = new Map();
 const invocations = {};
 
 class Context {
+    options = undefined;
     callbacks = {};
     ctx = undefined;
+    dynamicImported = {};
 
-    constructor() {
+    constructor(options) {
+        this.options = options;
         this.ctx = wasm._newContext();
+        contexts.set(this.ctx, this);
     }
 
     dispose() {
@@ -22,8 +27,30 @@ class Context {
                 wasm._freeJsValue(this.ctx, rejectFunc);
             }
         }
+        for (const pModuleContent of Object.values(this.dynamicImported)) {
+            wasm._free(pModuleContent);
+        }
         wasm._freeContext(this.ctx);
+        contexts.delete(this.ctx);
         this.ctx = undefined;
+    }
+
+    async dynamicImport({ctx, argc, argv, resolveFunc, rejectFunc, basename, filename}) {
+        try {
+            if (this.options?.dynamicImport) {
+                const decodedFileName = wasm.UTF8ToString(filename);
+                const content = await this.options.dynamicImport(basename, decodedFileName);
+                this.dynamicImported[decodedFileName] = allocateUTF8(content);
+            }
+        } catch(e) {
+            wasm._call(ctx, rejectFunc, allocateUTF8(JSON.stringify(`failed to dynamicImport: ${e}`)));
+            wasm._freeJsValue(ctx, resolveFunc);
+            wasm._freeJsValue(ctx, rejectFunc);
+            return;
+        }
+        wasm._doDynamicImport(ctx, argc, argv);
+        wasm._freeJsValue(ctx, resolveFunc);
+        wasm._freeJsValue(ctx, rejectFunc);
     }
 
     def(script, options) {
@@ -35,7 +62,7 @@ class Context {
                 throw new Error('context has been disposed');
             }
             const key = `key${nextId++}`;
-            const pScript = encodeString(`
+            const pScript = allocateUTF8(`
             (() => {
                 const __key = '${key}';
                 const __args = ${JSON.stringify(args.map(arg => typeof arg === 'function' ? { __f__: true } : arg))};
@@ -133,7 +160,7 @@ class Invocation {
                     if (!callback.resolveFunc) {
                         return;
                     }
-                    const pError = wasm._call(this.ctx, callback.resolveFunc, encodeString(JSON.stringify(v)));
+                    const pError = wasm._call(this.ctx, callback.resolveFunc, allocateUTF8(JSON.stringify(v)));
                     if (pError) {
                         this.setFailure(wasm.UTF8ToString(pError));
                     } else {
@@ -147,7 +174,7 @@ class Invocation {
                     if (!callback.rejectFunc) {
                         return;
                     }
-                    const pError = wasm._call(this.ctx, callback.rejectFunc, encodeString('' + e));
+                    const pError = wasm._call(this.ctx, callback.rejectFunc, allocateUTF8('' + e));
                     if (pError) {
                         this.setFailure(wasm.UTF8ToString(pError));
                     } else {
@@ -157,10 +184,10 @@ class Invocation {
                         callback.rejectFunc = 0;
                     }
                 });
-            return encodeString(promiseId);
+            return allocateUTF8(promiseId);
         }
         // eval.c dispatch will free this memory
-        return encodeString(JSON.stringify(invokeResult));
+        return allocateUTF8(JSON.stringify(invokeResult));
     }
 
     setPromiseCallbacks({ promiseId, rejectFunc, resolveFunc }) {
@@ -182,7 +209,7 @@ class Invocation {
     }
 }
 
-function encodeString(string) {
+function allocateUTF8(string) {
     if (string === undefined) {
         return 0;
     }
@@ -195,8 +222,8 @@ module.exports = function (wasmProvider) {
             wasm = await wasmProvider(options);
             wasm.dispatch = (encodedAction, encodedKey, encodedArgs) => {
                 const action = wasm.UTF8ToString(encodedAction);
-                const key = wasm.UTF8ToString(encodedKey);
                 const args = wasm.UTF8ToString(encodedArgs);
+                const key = wasm.UTF8ToString(encodedKey);
                 return invocations[key][action](args === 'undefined' ? undefined : JSON.parse(args));
             }
             wasm.setPromiseCallbacks = (encodedKey, encodedPromiseId, resolveFunc, rejectFunc) => {
@@ -204,11 +231,22 @@ module.exports = function (wasmProvider) {
                 const promiseId = wasm.UTF8ToString(encodedPromiseId);
                 return invocations[key]['setPromiseCallbacks']({ promiseId, resolveFunc, rejectFunc });
             }
-            wasm.dynamicImport = (ctx, argc, argv, basename, filename) => {
-                console.log(wasm.UTF8ToString(basename), wasm.UTF8ToString(filename));
+            wasm.dynamicImport = (ctx, argc, argv, resolveFunc, rejectFunc, basename, filename) => {
+                const context = contexts.get(ctx);
+                if (!context) {
+                    wasm._call(ctx, rejectFunc, allocateUTF8(JSON.stringify('internal error: context not found')));
+                    wasm._freeJsValue(ctx, resolveFunc);
+                    wasm._freeJsValue(ctx, rejectFunc);
+                    return;
+                }
+                context.dynamicImport({ ctx, argc, argv, resolveFunc, rejectFunc, basename, filename });
             }
             wasm.getModuleContent = (ctx, filename) => {
-                console.log(wasm.UTF8ToString(filename));
+                const context = contexts.get(ctx);
+                if (!context) {
+                    return 0;
+                }
+                return context.dynamicImported[wasm.UTF8ToString(filename)] || 0;
             }
         }
         return wasm;
@@ -236,7 +274,7 @@ module.exports = function (wasmProvider) {
             async def(script, options) {
                 if (!ctx) {
                     await loadWasm(contextOptions);
-                    ctx = new Context(options);
+                    ctx = new Context(contextOptions);
                 }
                 return ctx.def(script, options);
             },

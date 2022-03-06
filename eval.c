@@ -11,13 +11,15 @@ EM_JS(const char*, _setPromiseCallbacks, (const char* key, const char* promiseId
     return Module.setPromiseCallbacks(key, promiseId, resolve, reject);
 });
 
-EM_JS(void, _dynamicImport, (JSContext *ctx, int argc, JSValueConst *argv, const char* basename, const char* filename), {
-    return Module.dynamicImport(ctx, argc, argv, basename, filename);
+EM_JS(void, _dynamicImport, (JSContext *ctx, int argc, JSValueConst *argv, JSValueConst *resolveFunc, JSValueConst *rejectFunc, const char* basename, const char* filename), {
+    return Module.dynamicImport(ctx, argc, argv, resolveFunc, rejectFunc, basename, filename);
 });
 
-EM_JS(void, _getModuleContent, (JSContext *ctx, const char* filename), {
+EM_JS(const char*, _getModuleContent, (JSContext *ctx, const char* filename), {
     return Module.getModuleContent(ctx, filename);
 });
+
+// TODO: JS_ToCString memory leak
 
 JSValue dispatch(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv, int magic, JSValue *func_data) {
     const char* action = JS_ToCString(ctx, argv[0]);
@@ -60,8 +62,7 @@ JSModuleDef *js_module_loader(JSContext *ctx,
 {
     JSModuleDef *m;
     JSValue func_val;
-    const char* buf = "export default 'hello'";
-    _getModuleContent(ctx, module_name);
+    const char* buf = _getModuleContent(ctx, module_name);
     func_val = JS_Eval(ctx, (char *)buf, strlen(buf), module_name,
                         JS_EVAL_TYPE_MODULE | JS_EVAL_FLAG_COMPILE_ONLY);
     if (JS_IsException(func_val))
@@ -90,10 +91,27 @@ void freeContext(JSContext* ctx) {
 // override quickjs.c definition to make it async
 JSValue js_dynamic_import_job(JSContext *ctx, int argc, JSValueConst *argv);
 JSValue async_js_dynamic_import_job(JSContext *ctx, int argc, JSValueConst *argv) {
-    JSValueConst basename = argv[2];
-    JSValueConst filename = argv[3];
-    _dynamicImport(ctx, argc, argv, JS_ToCString(ctx, basename), JS_ToCString(ctx, filename));
-    return js_dynamic_import_job(ctx, argc, argv);
+    JSValueConst *newArgv = malloc(sizeof(JSValueConst) * 4);
+    newArgv[0] = argv[0];
+    newArgv[1] = argv[1];
+    newArgv[2] = argv[2];
+    newArgv[3] = argv[3];
+    JSValueConst* resolveFunc = &newArgv[0];
+    JSValueConst* rejectFunc = &newArgv[1];
+    // need to prevent resolveFunc/rejectFunc from GC
+    // will free them after callback
+    JS_DupValue(ctx, *resolveFunc);
+    JS_DupValue(ctx, *rejectFunc);
+    JSValueConst basename = newArgv[2];
+    JSValueConst filename = newArgv[3];
+    _dynamicImport(ctx, argc, newArgv, resolveFunc, rejectFunc, JS_ToCString(ctx, basename), JS_ToCString(ctx, filename));
+    return JS_UNDEFINED;
+}
+
+EMSCRIPTEN_KEEPALIVE
+void doDynamicImport(JSContext *ctx, int argc, JSValueConst *argv) {
+    JS_FreeValue(ctx, js_dynamic_import_job(ctx, argc, argv));
+    js_std_loop(ctx);
 }
 
 EMSCRIPTEN_KEEPALIVE

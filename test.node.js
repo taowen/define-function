@@ -85,15 +85,18 @@ async function test7() {
     })()
     `, {
         async dynamicImport(filename) {
-            console.log('!!!');
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            return `export default 'hello'`;
         }
     })
-    console.log(await f());
+    if ((await f()).default !== 'hello') {
+        assert.fail();
+    }
 }
 
 async function main() {
-    // await Promise.all([test1(), test2(), test3(), test4(), test6()])
-    // await test5();
+    await Promise.all([test1(), test2(), test3(), test4(), test6()])
+    await test5();
     await test7();
 }
 

@@ -8,12 +8,12 @@ git reset --hard HEAD
 git apply ../quickjs.patch
 popd
 emcc \
-    eval.c \
     quickjs/quickjs.c \
     quickjs/cutils.c \
     quickjs/libregexp.c \
     quickjs/libbf.c \
     quickjs/libunicode.c \
+    eval.c \
     -o eval.js \
     -Os -s WASM=1 \
     -DCONFIG_VERSION="\"1.0.0\"" \
@@ -24,7 +24,7 @@ emcc \
     -s GLOBAL_BASE=1024 -s TOTAL_STACK=2MB -s INITIAL_MEMORY=4MB \
     -s ALLOW_MEMORY_GROWTH=1 -s ALLOW_TABLE_GROWTH=1 \
     -s INCOMING_MODULE_JS_API=[] -s DYNAMIC_EXECUTION=0 \
-    -s EXPORTED_FUNCTIONS=["_eval","_malloc","_free"] \
+    -s EXPORTED_FUNCTIONS=["_malloc","_free"] \
     --memory-init-file 0 \
     -s AGGRESSIVE_VARIABLE_ELIMINATION=1 --closure 0 --minify 0
 brotli -f eval.wasm
