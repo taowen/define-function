@@ -46,11 +46,13 @@ class Context {
             wasm._call(ctx, rejectFunc, allocateUTF8(JSON.stringify(`failed to dynamicImport: ${e}`)));
             wasm._freeJsValue(ctx, resolveFunc);
             wasm._freeJsValue(ctx, rejectFunc);
+            wasm._free(argv);
             return;
         }
         wasm._doDynamicImport(ctx, argc, argv);
         wasm._freeJsValue(ctx, resolveFunc);
         wasm._freeJsValue(ctx, rejectFunc);
+        wasm._free(argv);
     }
 
     def(script, options) {
@@ -237,6 +239,7 @@ module.exports = function (wasmProvider) {
                     wasm._call(ctx, rejectFunc, allocateUTF8(JSON.stringify('internal error: context not found')));
                     wasm._freeJsValue(ctx, resolveFunc);
                     wasm._freeJsValue(ctx, rejectFunc);
+                    wasm._free(argv);
                     return;
                 }
                 context.dynamicImport({ ctx, argc, argv, resolveFunc, rejectFunc, basename, filename });

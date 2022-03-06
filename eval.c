@@ -91,7 +91,7 @@ void freeContext(JSContext* ctx) {
 // override quickjs.c definition to make it async
 JSValue js_dynamic_import_job(JSContext *ctx, int argc, JSValueConst *argv);
 JSValue async_js_dynamic_import_job(JSContext *ctx, int argc, JSValueConst *argv) {
-    JSValueConst *newArgv = malloc(sizeof(JSValueConst) * 4);
+    JSValueConst *newArgv = malloc(sizeof(JSValueConst) * 4); // will free it after callback
     newArgv[0] = argv[0];
     newArgv[1] = argv[1];
     newArgv[2] = argv[2];
