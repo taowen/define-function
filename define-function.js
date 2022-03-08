@@ -3,6 +3,25 @@ let nextId = 1;
 const contexts = new Map();
 const invocations = {};
 
+function* extractImportFroms(script) {
+    // import {a, b} from 'xxx'
+    for (const match of script.matchAll(/import\s+\{[\w|\s|,]*\}\sfrom\s+['|"](\w+)['|"]/g)) {
+        yield match[1];
+    }
+    // import 'xxx'
+    for (const match of script.matchAll(/import\s+['|"](\w+)['|"]/g)) {
+        yield match[1]
+    }
+    // import ab from 'xxx'
+    for (const match of script.matchAll(/import\s+\w+\s+from\s+['|"](\w+)['|"]/g)) {
+        yield match[1]
+    }
+    // import * as ab from 'xxx'
+    for (const match of script.matchAll(/import\s+\*\s+as\s+\w+\s+from\s+['|"](\w+)['|"]/g)) {
+        yield match[1]
+    }
+}
+
 class Context {
     options = undefined;
     callbacks = {};
@@ -35,11 +54,45 @@ class Context {
         this.ctx = undefined;
     }
 
+    async initGlobal(global) {
+        if (!global) {
+            return;
+        }
+        await this.inject('global', global);
+        for (const [k, v] of Object.entries(global)) {
+            if (typeof v === 'object') {
+                await this.inject(k, v);
+            }
+        }
+    }
+
+    async inject(target, obj) {
+        if (!global) {
+            return;
+        }
+        const args = [target];
+        for (const [k, v] of Object.entries(obj)) {
+            if (typeof v === 'function') {
+                args.push(k);
+                args.push(v.bind(obj))
+            } else {
+                args.push(k);
+                args.push(v);
+            }
+        }
+        const f = await this.def(`
+        const obj = global[arguments[0]] = global[arguments[0]] || {};
+        for (let i = 1; i < arguments.length; i+=2) {
+            obj[arguments[i]] = arguments[i+1];
+        }`);
+        f(...args);
+    }
+
     async dynamicImport({ctx, argc, argv, resolveFunc, rejectFunc, basename, filename}) {
         try {
             if (this.options?.dynamicImport) {
                 const decodedFileName = wasm.UTF8ToString(filename);
-                const content = await this.options.dynamicImport(basename, decodedFileName);
+                const content = await this.options.dynamicImport(wasm.UTF8ToString(basename), decodedFileName);
                 this.dynamicImported[decodedFileName] = allocateUTF8(content);
             }
         } catch(e) {
@@ -55,6 +108,25 @@ class Context {
         wasm._free(argv);
     }
 
+    async load(script, options) {
+        const filename = options?.filename || '<load>';
+        for (const importFrom of extractImportFroms(script)) {
+            if (!this.options?.dynamicImport) {
+                throw new Error(`can not import ${importFrom}, please provide optiones.dynamicImport callback`);
+            }
+            const content = await this.options.dynamicImport(filename, importFrom);
+            this.dynamicImported[importFrom] = allocateUTF8(content);
+        }
+        const pScript = allocateUTF8(script);
+        const pScriptName = allocateUTF8(filename)
+        const meta = options?.meta || { url: filename };
+        const pMeta = allocateUTF8(JSON.stringify(meta));
+        const pError = wasm._load(this.ctx, pScript, pScriptName, pMeta);
+        if (pError) {
+            throw new Error(wasm.UTF8ToString(pError));
+        }
+    }
+
     def(script, options) {
         if (!this.ctx) {
             throw new Error('context has been disposed');
@@ -64,10 +136,20 @@ class Context {
                 throw new Error('context has been disposed');
             }
             const key = `key${nextId++}`;
+            let hasCallback = false;
+            const encodedArgs = [];
+            for (const arg of args) {
+                if (typeof arg === 'function') {
+                    hasCallback = true;
+                    encodedArgs.push({ __f__: true });
+                } else {
+                    encodedArgs.push(arg);
+                }
+            }
             const pScript = allocateUTF8(`
             (() => {
                 const __key = '${key}';
-                const __args = ${JSON.stringify(args.map(arg => typeof arg === 'function' ? { __f__: true } : arg))};
+                const __args = ${JSON.stringify(encodedArgs)};
                 function dispatch(action, args) {
                     return __dispatch(action, __key, JSON.stringify(args));
                 }
@@ -108,8 +190,9 @@ class Context {
                 } catch (e) {
                     // ignore
                 } finally {
-                    wasm._free(pScript);
-                    delete invocations[key];
+                    if (!hasCallback) {
+                        delete invocations[key];
+                    }
                 }
             })();
             return invocation.syncResult();
@@ -256,8 +339,9 @@ module.exports = function (wasmProvider) {
     }
     async function defineFunction(script, options) {
         await loadWasm(options);
+        const ctx = new Context(options);
+        await ctx.initGlobal(options?.global);
         return (...args) => { // start a isolated context for each invocation
-            const ctx = new Context(options);
             const f = ctx.def(script, options);
             let result = undefined;
             try {
@@ -278,8 +362,17 @@ module.exports = function (wasmProvider) {
                 if (!ctx) {
                     await loadWasm(contextOptions);
                     ctx = new Context(contextOptions);
+                    await ctx.initGlobal(contextOptions?.global);
                 }
                 return ctx.def(script, options);
+            },
+            async load(script, options) {
+                if (!ctx) {
+                    await loadWasm(contextOptions);
+                    ctx = new Context(contextOptions);
+                    await ctx.initGlobal(contextOptions?.global);
+                }
+                return await ctx.load(script, options)
             },
             dispose() {
                 if (ctx) {

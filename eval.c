@@ -2,6 +2,7 @@
 #include <string.h>
 #include <malloc.h>
 #include "./quickjs/quickjs.h"
+#include "./quickjs/cutils.h"
 
 EM_JS(const char*, _dispatch, (const char* action, const char* key, const char* args), {
     return Module.dispatch(action, key, args);
@@ -78,6 +79,11 @@ JSContext* newContext() {
     JSRuntime* runtime = JS_NewRuntime();
     JS_SetModuleLoaderFunc(runtime, NULL, js_module_loader, NULL);
     JSContext* ctx = JS_NewContext(runtime);
+    JSValue global = JS_GetGlobalObject(ctx);
+    JSValue dispatchFunc = JS_NewCFunctionData(ctx, &dispatch, /* min argc */0, /* unused magic */0, /* func_data len */0, 0);
+    JS_SetPropertyStr(ctx, global, "__dispatch", dispatchFunc);
+    JS_SetPropertyStr(ctx, global, "global", JS_GetGlobalObject(ctx));
+    JS_FreeValue(ctx, global);
     return ctx;
 }
 
@@ -116,12 +122,45 @@ void doDynamicImport(JSContext *ctx, int argc, JSValueConst *argv) {
 
 EMSCRIPTEN_KEEPALIVE
 const char* eval(JSContext* ctx, char* str) {
-    JSValue global = JS_GetGlobalObject(ctx);
-    JSValue dispatchFunc = JS_NewCFunctionData(ctx, &dispatch, /* min argc */0, /* unused magic */0, /* func_data len */0, 0);
-    JS_SetPropertyStr(ctx, global, "__dispatch", dispatchFunc);
-    JS_SetPropertyStr(ctx, global, "global", JS_GetGlobalObject(ctx));
-    JS_FreeValue(ctx, global);
     JSValue result = JS_Eval(ctx, str, strlen(str), "<eval>", JS_EVAL_TYPE_GLOBAL);
+    if (JS_IsException(result)) {
+		JSValue realException = JS_GetException(ctx);
+        free((void*)str);
+		return JS_ToCString(ctx, realException);
+	}
+    JS_FreeValue(ctx, result);
+    js_std_loop(ctx);
+    free((void*)str);
+    return 0;
+}
+
+#define __exception __attribute__((warn_unused_result))
+
+__exception int JS_CopyDataProperties(JSContext *ctx,
+                                             JSValueConst target,
+                                             JSValueConst source,
+                                             JSValueConst excluded,
+                                             BOOL setprop);
+EMSCRIPTEN_KEEPALIVE
+const char* load(JSContext* ctx, char* str, const char* filename, const char* meta) {
+    JSValue result = JS_Eval(ctx, str, strlen(str), filename, JS_EVAL_TYPE_MODULE | JS_EVAL_FLAG_COMPILE_ONLY);
+    if (JS_IsException(result)) {
+		JSValue realException = JS_GetException(ctx);
+        free((void*)str);
+        free((void*)filename);
+        free((void*)meta);
+		return JS_ToCString(ctx, realException);
+	}
+    free((void*)str);
+    free((void*)filename);
+    JSModuleDef *m = JS_VALUE_GET_PTR(result);
+    JSValue metaObj = JS_GetImportMeta(ctx, m);
+    JSValue metaObj2 = JS_ParseJSON(ctx, meta, strlen(meta), "");
+    free((void*)meta);
+    if (JS_CopyDataProperties(ctx, metaObj, metaObj2, JS_UNDEFINED, TRUE)) {
+        return "failed to copy meta";
+    }
+    result = JS_EvalFunction(ctx, result);
     if (JS_IsException(result)) {
 		JSValue realException = JS_GetException(ctx);
 		return JS_ToCString(ctx, realException);

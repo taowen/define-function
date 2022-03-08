@@ -94,10 +94,35 @@ async function test7() {
     }
 }
 
+async function test8() {
+    const { context } = require('./index.node');
+    const ctx = context({
+        async dynamicImport(basename, filename) {
+            if (filename === 'xxx') {
+                return `export default 'hello'`
+            } else {
+                return '';
+            }
+        },
+        global: {
+            console
+        }
+    });
+    await ctx.load(`
+    import * as xxx from 'xxx';
+    console.log(import.meta, xxx)`, {
+        filename: 'abc.js',
+        meta: {
+            blah: 'blah'
+        }
+    });
+}
+
 async function main() {
     await Promise.all([test1(), test2(), test3(), test4(), test6()])
     await test5();
     await test7();
+    await test8();
 }
 
 main();

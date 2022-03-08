@@ -1,7 +1,16 @@
 diff --git a/quickjs.c b/quickjs.c
-index 48aeffc..5713a29 100644
+index 48aeffc..d79b9f8 100644
 --- a/quickjs.c
 +++ b/quickjs.c
+@@ -15634,7 +15634,7 @@ exception:
+     return -1;
+ }
+ 
+-static __exception int JS_CopyDataProperties(JSContext *ctx,
++__exception int JS_CopyDataProperties(JSContext *ctx,
+                                              JSValueConst target,
+                                              JSValueConst source,
+                                              JSValueConst excluded,
 @@ -28204,7 +28204,9 @@ JSModuleDef *JS_RunModule(JSContext *ctx, const char *basename,
      return m;
  }
