@@ -3,25 +3,6 @@ let nextId = 1;
 const contexts = new Map();
 const invocations = {};
 
-function* extractImportFroms(script) {
-    // import {a, b} from 'xxx'
-    for (const match of script.matchAll(/import\s+\{[\w|\s|,]*\}\sfrom\s+['|"](\w+)['|"]/g)) {
-        yield match[1];
-    }
-    // import 'xxx'
-    for (const match of script.matchAll(/import\s+['|"](\w+)['|"]/g)) {
-        yield match[1]
-    }
-    // import ab from 'xxx'
-    for (const match of script.matchAll(/import\s+\w+\s+from\s+['|"](\w+)['|"]/g)) {
-        yield match[1]
-    }
-    // import * as ab from 'xxx'
-    for (const match of script.matchAll(/import\s+\*\s+as\s+\w+\s+from\s+['|"](\w+)['|"]/g)) {
-        yield match[1]
-    }
-}
-
 class Context {
     options = undefined;
     callbacks = {};
@@ -92,8 +73,7 @@ class Context {
         try {
             if (this.options?.dynamicImport) {
                 const decodedFileName = wasm.UTF8ToString(filename);
-                const content = await this.options.dynamicImport(wasm.UTF8ToString(basename), decodedFileName);
-                this.dynamicImported[decodedFileName] = allocateUTF8(content);
+                await this.require(wasm.UTF8ToString(basename), decodedFileName)
             }
         } catch(e) {
             wasm._call(ctx, rejectFunc, allocateUTF8(JSON.stringify(`failed to dynamicImport: ${e}`)));
@@ -108,15 +88,15 @@ class Context {
         wasm._free(argv);
     }
 
-    async load(script, options) {
-        const filename = options?.filename || '<load>';
-        for (const importFrom of extractImportFroms(script)) {
-            if (!this.options?.dynamicImport) {
-                throw new Error(`can not import ${importFrom}, please provide optiones.dynamicImport callback`);
-            }
-            const content = await this.options.dynamicImport(filename, importFrom);
-            this.dynamicImported[importFrom] = allocateUTF8(content);
+    async require(basename, filename) {
+        if (this.options?.dynamicImport) {
+            const content = await this.options.dynamicImport(basename, filename);
+            this.dynamicImported[filename] = allocateUTF8(content);
         }
+    }
+
+    load(script, options) {
+        const filename = options?.filename || '<load>';
         const pScript = allocateUTF8(script);
         const pScriptName = allocateUTF8(filename)
         const meta = options?.meta || { url: filename };
@@ -328,11 +308,16 @@ module.exports = function (wasmProvider) {
                 context.dynamicImport({ ctx, argc, argv, resolveFunc, rejectFunc, basename, filename });
             }
             wasm.getModuleContent = (ctx, filename) => {
+                filename = wasm.UTF8ToString(filename);
                 const context = contexts.get(ctx);
                 if (!context) {
-                    return 0;
+                    throw new Error(`failed to getModuleContent of ${filename}`)
                 }
-                return context.dynamicImported[wasm.UTF8ToString(filename)] || 0;
+                const content = context.dynamicImported[filename];
+                if (!content) {
+                    throw new Error(`failed to getModuleContent of ${filename}`)
+                }
+                return content;
             }
         }
         return wasm;
@@ -373,6 +358,14 @@ module.exports = function (wasmProvider) {
                     await ctx.initGlobal(contextOptions?.global);
                 }
                 return await ctx.load(script, options)
+            },
+            async require(basename, filename) {
+                if (!ctx) {
+                    await loadWasm(contextOptions);
+                    ctx = new Context(contextOptions);
+                    await ctx.initGlobal(contextOptions?.global);
+                }
+                await ctx.require(basename, filename)
             },
             dispose() {
                 if (ctx) {
