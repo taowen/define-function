@@ -3,6 +3,24 @@ let nextId = 1;
 const contexts = new Map();
 const invocations = {};
 
+// import {a, b} from 'xxx'
+const re1 = /import\s+\{[\w\s,]*\}\sfrom\s+['"]([\w-]+)['"]/g;
+// import 'xxx'
+const re2 = /import\s+['"]([\w-]+)['"]/g;
+// import ab from 'xxx'
+const re3 = /import\s+\w+\s+from\s+['"]([\w-]+)['"]/g
+// import * as ab from 'xxx'
+const re4 = /import\s+\*\s+as\s+\w+\s+from\s+['"]([\w-]+)['"]/g
+const res = [re1, re2, re3, re4];
+
+function* extractImportFroms(script) {
+    for (const re of res) {
+        for (const match of script.matchAll(re)) {
+            yield match[1];
+        }
+    }
+}
+
 class Context {
     options = undefined;
     callbacks = {};
@@ -92,12 +110,18 @@ class Context {
         if (this.options?.dynamicImport) {
             const content = await this.options.dynamicImport(basename, filename);
             this.dynamicImported[filename] = allocateUTF8(content);
+            for (const script of extractImportFroms(content)) {
+                await this.require(filename, script);
+            }
         }
     }
 
-    load(script, options) {
+    async load(content, options) {
         const filename = options?.filename || '<load>';
-        const pScript = allocateUTF8(script);
+        for (const script of extractImportFroms(content)) {
+            await this.require(filename, script);
+        }
+        const pScript = allocateUTF8(content);
         const pScriptName = allocateUTF8(filename)
         const meta = options?.meta || { url: filename };
         const pMeta = allocateUTF8(JSON.stringify(meta));

@@ -108,7 +108,6 @@ async function test8() {
             console
         }
     });
-    await ctx.require('', 'xxx');
     await ctx.load(`
     import * as xxx from 'xxx';
     console.log(import.meta, xxx)`, {
