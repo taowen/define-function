@@ -4,16 +4,19 @@ const contexts = new Map();
 const invocations = {};
 
 // import {a, b} from 'xxx'
-const re1 = /import\s+\{[\w\s,]*\}\sfrom\s+['"]([\w-]+)['"]/g;
-// import 'xxx'
-const re2 = /import\s+['"]([\w-]+)['"]/g;
 // import ab from 'xxx'
-const re3 = /import\s+\w+\s+from\s+['"]([\w-]+)['"]/g
 // import * as ab from 'xxx'
-const re4 = /import\s+\*\s+as\s+\w+\s+from\s+['"]([\w-]+)['"]/g
-const res = [re1, re2, re3, re4];
+const re1 = /import\s+[\w\s,\*\}\{]*?\s+from\s+['"]([^'"]+)['"]/g;
+// import 'xxx'
+const re2 = /import\s+['"]([^'"]+)['"]/g;
+// export * from 'xxx'
+const re3 = /export\s+[\w\s,\*\}\{]*?\s+from\s+['"]([^'"]+)['"]/g;
+const res = [re1, re2, re3];
 
 function* extractImportFroms(script) {
+    if (!script) {
+        return
+    }
     for (const re of res) {
         for (const match of script.matchAll(re)) {
             yield match[1];
