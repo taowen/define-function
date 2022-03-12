@@ -120,7 +120,7 @@ class Context {
     }
 
     async load(content, options) {
-        const filename = options?.filename || '<load>';
+        const filename = options?.filename || `<load${nextId++}>`;
         for (const script of extractImportFroms(content)) {
             await this.require(filename, script);
         }
