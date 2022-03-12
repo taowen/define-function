@@ -132,6 +132,43 @@ class Context {
         if (pError) {
             throw new Error(wasm.UTF8ToString(pError));
         }
+        if (!this._loadModule) {
+            this._loadModule = await this.def(`
+            return (async() => {
+                const [moduleName] = arguments;
+                const m = await import(moduleName);
+                const exports = {};
+                for(const [k, v] of Object.entries(m)) {
+                    if (typeof v === 'function') {
+                        exports[k] = {__f__:true};
+                    } else {
+                        exports[k] = v;
+                    }
+                }
+                return JSON.stringify(exports);
+            })();
+            `)
+        }
+        const loadedModule = JSON.parse(await this._loadModule(filename));
+        for (const [k, v] of Object.entries(loadedModule)) {
+            if (v && v.__f__) {
+                loadedModule[k] = this.invokeModuleExport.bind(this, filename, k);
+            }
+        }
+        return loadedModule;
+    }
+
+    async invokeModuleExport(moduleName, exportName, ...args) {
+        if (!this._invokeModuleExport) {
+            this._invokeModuleExport = await this.def(`
+            return (async() => {
+                const [moduleName, exportName, ...args] = arguments;
+                const m = await import(moduleName);
+                return m[exportName](...args);
+            })();
+            `)
+        }
+        return await this._invokeModuleExport(moduleName, exportName, ...args);
     }
 
     def(script, options) {
