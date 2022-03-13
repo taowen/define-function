@@ -105,6 +105,41 @@ f() // 3
 ctx.dispose()
 ```
 
+inject value and callbacks into global
+
+```js
+const { context } = require('define-function')
+const ctx = context({ global: { 
+    console,
+    anwerOfEverything() {
+        return 42;
+    }
+} }) // inject console and anwerOfEverything to global
+const f = await ctx.def(`
+    console.log(anwerOfEverything());
+`)
+f() // 42
+ctx.dispose();
+```
+
+load es module
+
+```js
+const { context } = require('define-function')
+const ctx = context({ global: { 
+    console,
+    anwerOfEverything() {
+        return 42;
+    }
+} }) // inject console and anwerOfEverything to global
+const f = await ctx.def(`
+    console.log(anwerOfEverything());
+`)
+f() // 42
+ctx.dispose();
+```
+
+
 # Limit
 
 * function argument does not support Set/Map/Class or anything that can not survive JSON.parse(JSON.stringify), except the argument is a function

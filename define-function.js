@@ -377,11 +377,7 @@ module.exports = function (wasmProvider) {
                 if (!context) {
                     throw new Error(`failed to getModuleContent of ${filename}`)
                 }
-                const content = context.dynamicImported[filename];
-                if (!content) {
-                    throw new Error(`failed to getModuleContent of ${filename}`)
-                }
-                return content;
+                return context.dynamicImported[filename];
             }
         }
         return wasm;

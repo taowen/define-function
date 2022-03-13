@@ -117,6 +117,7 @@ async function test8() {
             blah: 'blah'
         }
     });
+    ctx.dispose();
 }
 
 async function test9() {
@@ -136,14 +137,15 @@ async function test9() {
     if (await sayHello() !== 'world') {
         assert.fail();
     }
+    ctx.dispose();
 }
 
 async function main() {
-    await Promise.all([test1(), test2(), test3(), test4(), test6()])
-    await test5();
-    await test7();
-    await test8();
-    await test9();
+    // await Promise.all([test1(), test2(), test3(), test4(), test6()])
+    // await test5();
+    // await test7();
+    // await test8();
+    // await test9();
 }
 
 main();

@@ -6,7 +6,7 @@ declare interface Context {
   load(script: string, options?: {
     filename?: string,
     meta?: Record<string, any>
-  }): Promise<void>;
+  }): Promise<any>;
   dispose(): void;
 }
 declare namespace defineFunction {

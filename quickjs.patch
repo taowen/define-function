@@ -1,5 +1,5 @@
 diff --git a/quickjs.c b/quickjs.c
-index 48aeffc..d79b9f8 100644
+index 48aeffc..480866e 100644
 --- a/quickjs.c
 +++ b/quickjs.c
 @@ -15634,7 +15634,7 @@ exception:
@@ -11,23 +11,64 @@ index 48aeffc..d79b9f8 100644
                                               JSValueConst target,
                                               JSValueConst source,
                                               JSValueConst excluded,
-@@ -28204,7 +28204,9 @@ JSModuleDef *JS_RunModule(JSContext *ctx, const char *basename,
+@@ -28204,7 +28204,43 @@ JSModuleDef *JS_RunModule(JSContext *ctx, const char *basename,
      return m;
  }
  
 -static JSValue js_dynamic_import_job(JSContext *ctx,
++static JSModuleDef *js_host_resolve_imported_module_by_value(JSContext *ctx,
++                                                    JSValue base_cname_val,
++                                                    JSValue cname1_val)
++{
++    JSRuntime *rt = ctx->rt;
++    JSModuleDef *m;
++    char *cname;
++    JSAtom module_name;
++
++    const char *base_cname = JS_ToCString(ctx, base_cname_val);
++    const char *cname1 = JS_ToCString(ctx, cname1_val);
++    if (!rt->module_normalize_func) {
++        cname = js_default_module_normalize_name(ctx, base_cname, cname1);
++    } else {
++        cname = rt->module_normalize_func(ctx, base_cname, cname1,
++                                          rt->module_loader_opaque);
++    }
++    JS_FreeCString(ctx, base_cname);
++    JS_FreeCString(ctx, cname1);
++    if (!cname)
++        return NULL;
++
++    module_name = JS_NewAtom(ctx, cname);
++    if (module_name == JS_ATOM_NULL) {
++        js_free(ctx, cname);
++        return NULL;
++    }
++
++    /* first look at the loaded modules */
++    m = js_find_loaded_module(ctx, module_name);
++    js_free(ctx, cname);
++    JS_FreeAtom(ctx, module_name);
++    return m;
++}
 +JSValue async_js_dynamic_import_job(JSContext *ctx,
 +                                     int argc, JSValueConst *argv);
 +JSValue js_dynamic_import_job(JSContext *ctx,
                                       int argc, JSValueConst *argv)
  {
      JSValueConst *resolving_funcs = argv;
-@@ -28279,7 +28281,7 @@ static JSValue js_dynamic_import(JSContext *ctx, JSValueConst specifier)
+@@ -28278,8 +28314,13 @@ static JSValue js_dynamic_import(JSContext *ctx, JSValueConst specifier)
+     args[1] = resolving_funcs[1];
      args[2] = basename_val;
      args[3] = specifier;
-     
+-    
 -    JS_EnqueueJob(ctx, js_dynamic_import_job, 4, args);
-+    JS_EnqueueJob(ctx, async_js_dynamic_import_job, 4, args);
++
++    JSModuleDef* m = js_host_resolve_imported_module_by_value(ctx, basename_val, specifier);
++    if(m == NULL) {
++        JS_EnqueueJob(ctx, async_js_dynamic_import_job, 4, args);
++    } else {
++        JS_EnqueueJob(ctx, js_dynamic_import_job, 4, args);
++    }
  
      JS_FreeValue(ctx, basename_val);
      JS_FreeValue(ctx, resolving_funcs[0]);
