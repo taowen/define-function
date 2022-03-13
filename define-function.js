@@ -388,19 +388,25 @@ module.exports = function (wasmProvider) {
     }
     async function defineFunction(script, options) {
         await loadWasm(options);
-        const ctx = new Context(options);
-        await ctx.initGlobal(options?.global);
         return (...args) => { // start a isolated context for each invocation
-            const f = ctx.def(script, options);
-            let result = undefined;
-            try {
-                return result = f(...args);
-            } finally {
-                if (result && result.finally) {
-                    result.finally(ctx.dispose.bind(ctx));
-                } else {
-                    ctx.dispose();
+            const ctx = new Context(options);
+            function defAndCall() {
+                const f = ctx.def(script, options);
+                let result = undefined;
+                try {
+                    return result = f(...args);
+                } finally {
+                    if (result && result.finally) {
+                        result.finally(ctx.dispose.bind(ctx));
+                    } else {
+                        ctx.dispose();
+                    }
                 }
+            }
+            if (options?.global) {
+                return ctx.initGlobal(options?.global).then(defAndCall);
+            } else {
+                return defAndCall();
             }
         };
     };

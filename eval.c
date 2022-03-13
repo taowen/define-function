@@ -24,8 +24,12 @@ EM_JS(const char*, _getModuleContent, (JSContext *ctx, const char* filename), {
 
 JSValue dispatch(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv, int magic, JSValue *func_data) {
     const char* action = JS_ToCString(ctx, argv[0]);
+    JS_FreeCString(ctx, action);
     const char* key = JS_ToCString(ctx, argv[1]);
-    const char* result = _dispatch(action, key, JS_ToCString(ctx, argv[2]));
+    JS_FreeCString(ctx, key);
+    const char* actionArgs = JS_ToCString(ctx, argv[2]);
+    JS_FreeCString(ctx, actionArgs);
+    const char* result = _dispatch(action, key, actionArgs);
     if (result == NULL) {
         return JS_UNDEFINED;
     }
