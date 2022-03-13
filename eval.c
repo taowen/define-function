@@ -20,8 +20,6 @@ EM_JS(const char*, _getModuleContent, (JSContext *ctx, const char* filename), {
     return Module.getModuleContent(ctx, filename);
 });
 
-// TODO: JS_ToCString memory leak
-
 JSValue dispatch(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv, int magic, JSValue *func_data) {
     const char* action = JS_ToCString(ctx, argv[0]);
     JS_FreeCString(ctx, action);
@@ -112,9 +110,11 @@ JSValue async_js_dynamic_import_job(JSContext *ctx, int argc, JSValueConst *argv
     // will free them after callback
     JS_DupValue(ctx, *resolveFunc);
     JS_DupValue(ctx, *rejectFunc);
-    JSValueConst basename = newArgv[2];
-    JSValueConst filename = newArgv[3];
-    _dynamicImport(ctx, argc, newArgv, resolveFunc, rejectFunc, JS_ToCString(ctx, basename), JS_ToCString(ctx, filename));
+    const char* basename = JS_ToCString(ctx, newArgv[2]);
+    const char* filename = JS_ToCString(ctx, newArgv[3]);
+    JS_FreeCString(ctx, basename);
+    JS_FreeCString(ctx, filename);
+    _dynamicImport(ctx, argc, newArgv, resolveFunc, rejectFunc, basename, filename);
     return JS_UNDEFINED;
 }
 
@@ -130,7 +130,9 @@ const char* eval(JSContext* ctx, char* str) {
     if (JS_IsException(result)) {
 		JSValue realException = JS_GetException(ctx);
         free((void*)str);
-		return JS_ToCString(ctx, realException);
+        const char* errorMessage = JS_ToCString(ctx, realException);
+        JS_FreeCString(ctx, errorMessage);
+		return errorMessage;
 	}
     JS_FreeValue(ctx, result);
     js_std_loop(ctx);
@@ -153,7 +155,9 @@ const char* load(JSContext* ctx, char* str, const char* filename, const char* me
         free((void*)str);
         free((void*)filename);
         free((void*)meta);
-		return JS_ToCString(ctx, realException);
+        const char* errorMessage = JS_ToCString(ctx, realException);
+        JS_FreeCString(ctx, errorMessage);
+		return errorMessage;
 	}
     free((void*)str);
     free((void*)filename);
@@ -167,7 +171,9 @@ const char* load(JSContext* ctx, char* str, const char* filename, const char* me
     result = JS_EvalFunction(ctx, result);
     if (JS_IsException(result)) {
 		JSValue realException = JS_GetException(ctx);
-		return JS_ToCString(ctx, realException);
+        const char* errorMessage = JS_ToCString(ctx, realException);
+        JS_FreeCString(ctx, errorMessage);
+		return errorMessage;
 	}
     JS_FreeValue(ctx, result);
     js_std_loop(ctx);
@@ -185,7 +191,9 @@ const char* call(JSContext* ctx, JSValue* pFunc, const char* args) {
     JSValue result = JS_Call(ctx, *pFunc, JS_UNDEFINED, 1, &argsVal);
     if (JS_IsException(result)) {
 		JSValue realException = JS_GetException(ctx);
-		return JS_ToCString(ctx, realException);
+        const char* errorMessage = JS_ToCString(ctx, realException);
+        JS_FreeCString(ctx, errorMessage);
+		return errorMessage;
 	}
     JS_FreeValue(ctx, result);
     js_std_loop(ctx);

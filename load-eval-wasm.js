@@ -364,7 +364,17 @@ var Module = (() => {
   }
 
   function _fd_write(fd, iov, iovcnt, pnum) {
-   throw new Error('not implemented');
+    var num = 0;
+    for (var i = 0; i < iovcnt; i++) {
+     var ptr = HEAP32[iov >> 2];
+     var len = HEAP32[iov + 4 >> 2];
+     iov += 8;
+     if (typeof process !== 'undefined') {
+      process.stdout.write(UTF8ToString(ptr, len))
+     }
+     num += len;
+    }
+    HEAP32[pnum >> 2] = num;
   }
   
   function _gettimeofday(ptr) {
