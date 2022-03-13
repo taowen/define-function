@@ -166,9 +166,13 @@ const char* load(JSContext* ctx, char* str, const char* filename, const char* me
     JSValue metaObj2 = JS_ParseJSON(ctx, meta, strlen(meta), "");
     free((void*)meta);
     if (JS_CopyDataProperties(ctx, metaObj, metaObj2, JS_UNDEFINED, TRUE)) {
+        JS_FreeValue(ctx, metaObj);
+        JS_FreeValue(ctx, metaObj2);
         return "failed to copy meta";
     }
     result = JS_EvalFunction(ctx, result);
+    JS_FreeValue(ctx, metaObj);
+    JS_FreeValue(ctx, metaObj2);
     if (JS_IsException(result)) {
 		JSValue realException = JS_GetException(ctx);
         const char* errorMessage = JS_ToCString(ctx, realException);

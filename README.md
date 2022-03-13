@@ -122,23 +122,25 @@ f() // 42
 ctx.dispose();
 ```
 
-load es module
+import and export es module
 
 ```js
 const { context } = require('define-function')
-const ctx = context({ global: { 
-    console,
-    anwerOfEverything() {
-        return 42;
+const ctx = context({ 
+    dynamicImport(basename, filename) {
+        if (filename !== 'xxx') {
+            throw new Error('expect xxx');
+        }
+        return `export function sayHello() { return 'hello' }`
     }
-} }) // inject console and anwerOfEverything to global
-const f = await ctx.def(`
-    console.log(anwerOfEverything());
+});
+const { hello } = await ctx.load(`
+    import { sayHello } from 'xxx';
+    export const hello = sayHello();
 `)
-f() // 42
+console.log(hello) // hello
 ctx.dispose();
 ```
-
 
 # Limit
 
