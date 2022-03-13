@@ -127,8 +127,8 @@ import and export es module
 ```js
 const { context } = require('define-function')
 const ctx = context({ 
-    dynamicImport(basename, filename) {
-        if (filename !== 'xxx') {
+    loadModuleContent(moduleName) {
+        if (moduleName !== 'xxx') {
             throw new Error('expect xxx');
         }
         return `export function sayHello() { return 'hello' }`

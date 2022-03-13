@@ -124,6 +124,18 @@ void doDynamicImport(JSContext *ctx, int argc, JSValueConst *argv) {
     js_std_loop(ctx);
 }
 
+char *js_default_module_normalize_name(JSContext *ctx, const char *base_name, const char *name);
+void js_free(JSContext *ctx, void *ptr);
+
+EMSCRIPTEN_KEEPALIVE
+char *pathJoin(JSContext *ctx, const char *base_name, const char *name) {
+    char * moduleName = js_default_module_normalize_name(ctx, base_name, name);
+    js_free(ctx, moduleName);
+    free((void*)base_name);
+    free((void*)name);
+    return moduleName;
+}
+
 EMSCRIPTEN_KEEPALIVE
 const char* eval(JSContext* ctx, char* str) {
     JSValue result = JS_Eval(ctx, str, strlen(str), "<eval>", JS_EVAL_TYPE_GLOBAL);

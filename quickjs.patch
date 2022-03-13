@@ -1,5 +1,5 @@
 diff --git a/quickjs.c b/quickjs.c
-index 48aeffc..480866e 100644
+index 48aeffc..66253ee 100644
 --- a/quickjs.c
 +++ b/quickjs.c
 @@ -15634,7 +15634,7 @@ exception:
@@ -11,6 +11,15 @@ index 48aeffc..480866e 100644
                                               JSValueConst target,
                                               JSValueConst source,
                                               JSValueConst excluded,
+@@ -27251,7 +27251,7 @@ void JS_SetModuleLoaderFunc(JSRuntime *rt,
+ }
+ 
+ /* default module filename normalizer */
+-static char *js_default_module_normalize_name(JSContext *ctx,
++char *js_default_module_normalize_name(JSContext *ctx,
+                                               const char *base_name,
+                                               const char *name)
+ {
 @@ -28204,7 +28204,43 @@ JSModuleDef *JS_RunModule(JSContext *ctx, const char *basename,
      return m;
  }

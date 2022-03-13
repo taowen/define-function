@@ -425,20 +425,24 @@ var Module = (() => {
     return (_doDynamicImport = Module["_doDynamicImport"] = Module["asm"]["t"]).apply(null, arguments);
    };
    
+   var _pathJoin = Module["_pathJoin"] = function() {
+    return (_pathJoin = Module["_pathJoin"] = Module["asm"]["u"]).apply(null, arguments);
+   };
+   
    var _eval = Module["_eval"] = function() {
-    return (_eval = Module["_eval"] = Module["asm"]["u"]).apply(null, arguments);
+    return (_eval = Module["_eval"] = Module["asm"]["v"]).apply(null, arguments);
    };
    
    var _load = Module["_load"] = function() {
-    return (_load = Module["_load"] = Module["asm"]["v"]).apply(null, arguments);
+    return (_load = Module["_load"] = Module["asm"]["w"]).apply(null, arguments);
    };
    
    var _call = Module["_call"] = function() {
-    return (_call = Module["_call"] = Module["asm"]["w"]).apply(null, arguments);
+    return (_call = Module["_call"] = Module["asm"]["x"]).apply(null, arguments);
    };
    
    var _freeJsValue = Module["_freeJsValue"] = function() {
-    return (_freeJsValue = Module["_freeJsValue"] = Module["asm"]["x"]).apply(null, arguments);
+    return (_freeJsValue = Module["_freeJsValue"] = Module["asm"]["y"]).apply(null, arguments);
    };
 
   Module["UTF8ToString"] = UTF8ToString;

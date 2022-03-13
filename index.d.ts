@@ -12,7 +12,7 @@ declare interface Context {
 declare namespace defineFunction {
     var context: (options?: {
       wasmFile?: string,
-      dynamicImport?: (basename: string, filename: string) => Promise<string>,
+      loadModuleContent?: (moduleName: string, extra?: { basename: string, filename: string }) => Promise<string>,
       global?: Record<string, any>
     }) => Context;
 }

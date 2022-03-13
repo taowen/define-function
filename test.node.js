@@ -85,7 +85,7 @@ async function test7() {
         return await import('sideFile.js');
     })()
     `, {
-        async dynamicImport(filename) {
+        async loadModuleContent(moduleName) {
             await new Promise(resolve => setTimeout(resolve, 1000));
             return `export default 'hello'`;
         }
@@ -98,8 +98,8 @@ async function test7() {
 async function test8() {
     const { context } = require('./index.node');
     const ctx = context({
-        async dynamicImport(basename, filename) {
-            if (filename === 'xxx') {
+        async loadModuleContent(moduleName) {
+            if (moduleName === 'xxx') {
                 return `export default 'hello'`
             } else {
                 return '';
@@ -140,12 +140,35 @@ async function test9() {
     ctx.dispose();
 }
 
+async function test10() {
+    const { context } = require('./index.node');
+    const ctx = context({
+        loadModuleContent(moduleName) {
+            if (moduleName !== 'someDir/b.js') {
+                assert.fail();
+            }
+            return `export const msg = 'hello';`
+        }
+    });
+    const { result } = await ctx.load(`
+    import { msg } from '../b.js'
+    export const result = msg;
+    `, {
+        filename: 'someDir/someSubDir/a.js'
+    });
+    if (result !== 'hello') {
+        assert.fail();
+    }
+    ctx.dispose();
+}
+
 async function main() {
     await Promise.all([test1(), test2(), test3(), test4(), test6()])
     await test5();
     await test7();
     await test8();
     await test9();
+    await test10();
 }
 
 main();

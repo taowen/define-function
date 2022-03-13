@@ -28,7 +28,7 @@ class Context {
     options = undefined;
     callbacks = {};
     ctx = undefined;
-    dynamicImported = {};
+    moduleContents = {};
 
     constructor(options) {
         this.options = options;
@@ -48,7 +48,7 @@ class Context {
                 wasm._freeJsValue(this.ctx, rejectFunc);
             }
         }
-        for (const pModuleContent of Object.values(this.dynamicImported)) {
+        for (const pModuleContent of Object.values(this.moduleContents)) {
             wasm._free(pModuleContent);
         }
         wasm._freeContext(this.ctx);
@@ -90,11 +90,10 @@ class Context {
         f(...args);
     }
 
-    async dynamicImport({ctx, argc, argv, resolveFunc, rejectFunc, basename, filename}) {
+    async dynamicImport({ctx, argc, argv, resolveFunc, rejectFunc, basename, filename }) {
         try {
-            if (this.options?.dynamicImport) {
-                const decodedFileName = wasm.UTF8ToString(filename);
-                await this.require(wasm.UTF8ToString(basename), decodedFileName)
+            if (this.options?.loadModuleContent) {
+                await this.require(basename, filename)
             }
         } catch(e) {
             wasm._call(ctx, rejectFunc, allocateUTF8(JSON.stringify(`failed to dynamicImport: ${e}`)));
@@ -110,19 +109,28 @@ class Context {
     }
 
     async require(basename, filename) {
-        if (this.options?.dynamicImport) {
-            const content = await this.options.dynamicImport(basename, filename);
-            this.dynamicImported[filename] = allocateUTF8(content);
-            for (const script of extractImportFroms(content)) {
-                await this.require(filename, script);
-            }
+        if (!this.options?.loadModuleContent) {
+            throw new Error(`missing options.loadModuleContent can not load content of ${filename} imported by ${basename}`);
+        }
+        let moduleName = filename;
+        if (filename[0] === '.') {
+            const pBasename = allocateUTF8(basename);
+            const pFilename = allocateUTF8(filename);
+            const pModuleName = wasm._pathJoin(this.ctx, pBasename, pFilename);
+            // pModuleName freed by _pathJoin
+            moduleName = wasm.UTF8ToString(pModuleName);
+        }
+        const content = await this.options.loadModuleContent(moduleName, { basename, filename });
+        this.moduleContents[moduleName] = allocateUTF8(content);
+        for (const importFrom of extractImportFroms(content)) {
+            await this.require(moduleName, importFrom);
         }
     }
 
     async load(content, options) {
         const filename = options?.filename || `<load${nextId++}>`;
-        for (const script of extractImportFroms(content)) {
-            await this.require(filename, script);
+        for (const importFrom of extractImportFroms(content)) {
+            await this.require(filename, importFrom);
         }
         const pScript = allocateUTF8(content);
         const pScriptName = allocateUTF8(filename)
@@ -361,6 +369,8 @@ module.exports = function (wasmProvider) {
                 return invocations[key]['setPromiseCallbacks']({ promiseId, resolveFunc, rejectFunc });
             }
             wasm.dynamicImport = (ctx, argc, argv, resolveFunc, rejectFunc, basename, filename) => {
+                basename = wasm.UTF8ToString(basename);
+                filename = wasm.UTF8ToString(filename);
                 const context = contexts.get(ctx);
                 if (!context) {
                     wasm._call(ctx, rejectFunc, allocateUTF8(JSON.stringify('internal error: context not found')));
@@ -377,7 +387,7 @@ module.exports = function (wasmProvider) {
                 if (!context) {
                     throw new Error(`failed to getModuleContent of ${filename}`)
                 }
-                return context.dynamicImported[filename];
+                return context.moduleContents[filename];
             }
         }
         return wasm;
