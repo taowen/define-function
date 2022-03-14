@@ -120,18 +120,26 @@ class Context {
             // pModuleName freed by _pathJoin
             moduleName = wasm.UTF8ToString(pModuleName);
         }
+        if (this.moduleContents[moduleName] !== undefined) {
+            return;
+        }
+        this.moduleContents[moduleName] = 0;
         const content = await this.options.loadModuleContent(moduleName, { basename, filename });
         this.moduleContents[moduleName] = allocateUTF8(content);
+        const promises = [];
         for (const importFrom of extractImportFroms(content)) {
-            await this.require(moduleName, importFrom);
+            promises.push(this.require(moduleName, importFrom));
         }
+        await Promise.all(promises);
     }
 
     async load(content, options) {
         const filename = options?.filename || `<load${nextId++}>`;
+        const promises = [];
         for (const importFrom of extractImportFroms(content)) {
-            await this.require(filename, importFrom);
+            promises.push(this.require(filename, importFrom));
         }
+        await Promise.all(promises);
         const pScript = allocateUTF8(content);
         const pScriptName = allocateUTF8(filename)
         const meta = options?.meta || { url: filename };
