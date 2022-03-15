@@ -130,10 +130,11 @@ void js_free(JSContext *ctx, void *ptr);
 EMSCRIPTEN_KEEPALIVE
 char *pathJoin(JSContext *ctx, const char *base_name, const char *name) {
     char * moduleName = js_default_module_normalize_name(ctx, base_name, name);
+    char *copiedModuleName = strdup(moduleName);
     js_free(ctx, moduleName);
     free((void*)base_name);
     free((void*)name);
-    return moduleName;
+    return copiedModuleName;
 }
 
 EMSCRIPTEN_KEEPALIVE

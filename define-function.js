@@ -117,8 +117,8 @@ class Context {
             const pBasename = allocateUTF8(basename);
             const pFilename = allocateUTF8(filename);
             const pModuleName = wasm._pathJoin(this.ctx, pBasename, pFilename);
-            // pModuleName freed by _pathJoin
             moduleName = wasm.UTF8ToString(pModuleName);
+            wasm._free(pModuleName);
         }
         if (this.moduleContents[moduleName] !== undefined) {
             return;
