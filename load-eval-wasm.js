@@ -202,10 +202,10 @@ var Module = (() => {
    function receiveInstance(instance, module) {
     var exports = instance.exports;
     Module["asm"] = exports;
-    wasmMemory = Module["asm"]["m"];
+    wasmMemory = Module["asm"]["l"];
     updateGlobalBufferAndViews(wasmMemory.buffer);
-    wasmTable = Module["asm"]["q"];
-    addOnInit(Module["asm"]["n"]);
+    wasmTable = Module["asm"]["p"];
+    addOnInit(Module["asm"]["m"]);
     removeRunDependency("wasm-instantiate");
    }
    addRunDependency("wasm-instantiate");
@@ -231,10 +231,6 @@ var Module = (() => {
 
   function _getModuleContent(ctx, module_name) {
     return Module.getModuleContent(ctx, module_name);
-  }
-  
-  function _setPromiseCallbacks(key, promiseId, resolve, reject) {
-   return Module.setPromiseCallbacks(key, promiseId, resolve, reject);
   }
   
   function callRuntimeCallbacks(callbacks) {
@@ -386,15 +382,14 @@ var Module = (() => {
 
   var asmLibraryArg = {
     "a": ___assert_fail,
-    "k": _dispatch,
+    "j": _dispatch,
     "h": _dynamicImport,
     "i": _getModuleContent,
     "e": __localtime_js,
-    "j": _setPromiseCallbacks,
     "f": __tzset_js,
     "b": _abort,
     "g": _emscripten_memcpy_big,
-    "l": _emscripten_resize_heap,
+    "k": _emscripten_resize_heap,
     "d": _fd_write,
     "c": _gettimeofday
    };
@@ -402,47 +397,47 @@ var Module = (() => {
    var asm = createWasm();
    
    var ___wasm_call_ctors = Module["___wasm_call_ctors"] = function() {
-    return (___wasm_call_ctors = Module["___wasm_call_ctors"] = Module["asm"]["n"]).apply(null, arguments);
+    return (___wasm_call_ctors = Module["___wasm_call_ctors"] = Module["asm"]["m"]).apply(null, arguments);
    };
    
    var _malloc = Module["_malloc"] = function() {
-    return (_malloc = Module["_malloc"] = Module["asm"]["o"]).apply(null, arguments);
+    return (_malloc = Module["_malloc"] = Module["asm"]["n"]).apply(null, arguments);
    };
    
    var _free = Module["_free"] = function() {
-    return (_free = Module["_free"] = Module["asm"]["p"]).apply(null, arguments);
+    return (_free = Module["_free"] = Module["asm"]["o"]).apply(null, arguments);
    };
    
    var _newContext = Module["_newContext"] = function() {
-    return (_newContext = Module["_newContext"] = Module["asm"]["r"]).apply(null, arguments);
+    return (_newContext = Module["_newContext"] = Module["asm"]["q"]).apply(null, arguments);
    };
    
    var _freeContext = Module["_freeContext"] = function() {
-    return (_freeContext = Module["_freeContext"] = Module["asm"]["s"]).apply(null, arguments);
+    return (_freeContext = Module["_freeContext"] = Module["asm"]["r"]).apply(null, arguments);
    };
    
    var _doDynamicImport = Module["_doDynamicImport"] = function() {
-    return (_doDynamicImport = Module["_doDynamicImport"] = Module["asm"]["t"]).apply(null, arguments);
+    return (_doDynamicImport = Module["_doDynamicImport"] = Module["asm"]["s"]).apply(null, arguments);
    };
    
    var _pathJoin = Module["_pathJoin"] = function() {
-    return (_pathJoin = Module["_pathJoin"] = Module["asm"]["u"]).apply(null, arguments);
+    return (_pathJoin = Module["_pathJoin"] = Module["asm"]["t"]).apply(null, arguments);
    };
    
    var _eval = Module["_eval"] = function() {
-    return (_eval = Module["_eval"] = Module["asm"]["v"]).apply(null, arguments);
+    return (_eval = Module["_eval"] = Module["asm"]["u"]).apply(null, arguments);
    };
    
    var _load = Module["_load"] = function() {
-    return (_load = Module["_load"] = Module["asm"]["w"]).apply(null, arguments);
+    return (_load = Module["_load"] = Module["asm"]["v"]).apply(null, arguments);
    };
    
    var _call = Module["_call"] = function() {
-    return (_call = Module["_call"] = Module["asm"]["x"]).apply(null, arguments);
+    return (_call = Module["_call"] = Module["asm"]["w"]).apply(null, arguments);
    };
    
    var _freeJsValue = Module["_freeJsValue"] = function() {
-    return (_freeJsValue = Module["_freeJsValue"] = Module["asm"]["y"]).apply(null, arguments);
+    return (_freeJsValue = Module["_freeJsValue"] = Module["asm"]["x"]).apply(null, arguments);
    };
 
   Module["UTF8ToString"] = UTF8ToString;

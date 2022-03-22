@@ -26,28 +26,61 @@ function* extractImportFroms(script) {
 
 class Context {
     options = undefined;
-    callbacks = {};
     ctx = undefined;
     moduleContents = {};
     disposables = [];
+    createPromise;
+    invokeCallback;
+    deleteCallback;
 
     constructor(options) {
         this.options = options;
         this.ctx = wasm._newContext();
         contexts.set(this.ctx, this);
+        this.def(`
+            global.__s__ = global.__s__ || {
+                nextId: 1,
+                promises: new Map(),
+                callbacks: new Map(),
+                createPromise() {
+                    const promiseId = this.nextId++;
+                    const result = { __p__: promiseId };
+                    this.promises.set(promiseId, new Promise((resolve, reject) => {
+                        result.resolve = this.wrapCallback(resolve);
+                        result.reject = this.wrapCallback(reject);
+                    }));
+                    return result;
+                },
+                wrapCallback(callback) {
+                    const callbackId = this.nextId++;
+                    this.callbacks.set(callbackId, callback);
+                    return callbackId;
+                },
+                getAndDeletePromise(promiseId) {
+                    const promise = this.promises.get(promiseId);
+                    this.promises.delete(promiseId);
+                    return promise;
+                },
+                invokeCallback(callbackId, args) {
+                    const callback = this.callbacks.get(callbackId);
+                    if (!callback) {
+                        return undefined;
+                    }
+                    return callback.apply(undefined, args);
+                },
+                deleteCallback(callbackId) {
+                    this.callbacks.delete(callbackId);
+                }
+            };        
+        `)();
+        this.createPromise = this.def(`return __s__.createPromise()`);
+        this.invokeCallback = this.def(`return __s__.invokeCallback(...arguments)`);
+        this.deleteCallback = this.def(`return __s__.deleteCallback(...arguments)`);
     }
 
     dispose() {
         if (!this.ctx) {
             return; // already disposed
-        }
-        for (const { resolveFunc, rejectFunc } of Object.values(this.callbacks)) {
-            if (resolveFunc) {
-                wasm._freeJsValue(this.ctx, resolveFunc);
-            }
-            if (rejectFunc) {
-                wasm._freeJsValue(this.ctx, rejectFunc);
-            }
         }
         for (const disposable of this.disposables) {
             disposable.dispose();
@@ -212,7 +245,11 @@ class Context {
                     // the argument is a function
                     if (arg && arg.__f__) {
                         return function(...args) {
-                            return dispatch('invoke', {slot:i, args});
+                            const invokeResult = dispatch('invoke', {slot:i, args});
+                            if (invokeResult && invokeResult.__p__) {
+                                return global.__s__.getAndDeletePromise(invokeResult.__p__);
+                            }
+                            return invokeResult;
                         }
                     }
                     return arg;
@@ -234,7 +271,7 @@ class Context {
                 }
             })();
             `);
-            const invocation = invocations[key] = new Invocation({ args, callbacks: this.callbacks, ctx: this.ctx, key}, options?.timeout);
+            const invocation = invocations[key] = new Invocation({ args, context: this, key}, options?.timeout);
             const pError = wasm._eval(this.ctx, pScript);
             if (pError) {
                 throw new Error(wasm.UTF8ToString(pError));
@@ -265,8 +302,7 @@ class Invocation {
     resolveAsyncResult;
     rejectAsyncResult;
     args;
-    callbacks;
-    ctx;
+    context;
     key;
 
     constructor(init, timeout) {
@@ -297,51 +333,28 @@ class Invocation {
     invoke(invokeArgs) {
         const invokeResult = this.args[invokeArgs.slot](...invokeArgs.args);
         if (invokeResult && invokeResult.then && invokeResult.catch) {
-            const promiseId = `p${nextId++}`;
-            const callback = this.callbacks[promiseId] = {
-                promise: invokeResult,
-                rejectFunc: 0, // will be filled by setPromiseCallbacks
-                resolveFunc: 0, // will be filled by setPromiseCallbacks
-            };
+            const { __p__, resolve, reject } = this.context.createPromise();
             invokeResult
                 .then(v => {
-                    if (!callback.resolveFunc) {
-                        return;
-                    }
-                    const pError = wasm._call(this.ctx, callback.resolveFunc, allocateUTF8(JSON.stringify(v)));
-                    if (pError) {
-                        this.setFailure(wasm.UTF8ToString(pError));
-                    } else {
-                        wasm._freeJsValue(this.ctx, callback.resolveFunc);
-                        callback.resolveFunc = 0;
-                        wasm._freeJsValue(this.ctx, callback.rejectFunc);
-                        callback.rejectFunc = 0;
+                    if (this.context.ctx) {
+                        this.context.invokeCallback(resolve, v);
                     }
                 })
                 .catch(e => {
-                    if (!callback.rejectFunc) {
-                        return;
+                    if (this.context.ctx) {
+                        this.context.invokeCallback(reject, '' + e);
                     }
-                    const pError = wasm._call(this.ctx, callback.rejectFunc, allocateUTF8('' + e));
-                    if (pError) {
-                        this.setFailure(wasm.UTF8ToString(pError));
-                    } else {
-                        wasm._freeJsValue(this.ctx, callback.resolveFunc);
-                        callback.resolveFunc = 0;
-                        wasm._freeJsValue(this.ctx, callback.rejectFunc);
-                        callback.rejectFunc = 0;
+                })
+                .finally(() => {
+                    if (this.context.ctx) {
+                        this.context.deleteCallback(resolve);
+                        this.context.deleteCallback(reject);
                     }
                 });
-            return allocateUTF8(promiseId);
+            return allocateUTF8(JSON.stringify({ __p__ }));
         }
         // eval.c dispatch will free this memory
         return allocateUTF8(JSON.stringify(invokeResult));
-    }
-
-    setPromiseCallbacks({ promiseId, rejectFunc, resolveFunc }) {
-        this.callbacks[promiseId].resolveFunc = resolveFunc;
-        this.callbacks[promiseId].rejectFunc = rejectFunc;
-        return 0;
     }
 
     setSuccess(value) {
@@ -373,11 +386,6 @@ module.exports = function (wasmProvider) {
                 const args = wasm.UTF8ToString(encodedArgs);
                 const key = wasm.UTF8ToString(encodedKey);
                 return invocations[key][action](args === 'undefined' ? undefined : JSON.parse(args));
-            }
-            wasm.setPromiseCallbacks = (encodedKey, encodedPromiseId, resolveFunc, rejectFunc) => {
-                const key = wasm.UTF8ToString(encodedKey);
-                const promiseId = wasm.UTF8ToString(encodedPromiseId);
-                return invocations[key]['setPromiseCallbacks']({ promiseId, resolveFunc, rejectFunc });
             }
             wasm.dynamicImport = (ctx, argc, argv, resolveFunc, rejectFunc, basename, filename) => {
                 basename = wasm.UTF8ToString(basename);

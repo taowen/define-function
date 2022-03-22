@@ -8,10 +8,6 @@ EM_JS(const char*, _dispatch, (const char* action, const char* key, const char* 
     return Module.dispatch(action, key, args);
 });
 
-EM_JS(const char*, _setPromiseCallbacks, (const char* key, const char* promiseId, JSValue* resolve, JSValue* reject), {
-    return Module.setPromiseCallbacks(key, promiseId, resolve, reject);
-});
-
 EM_JS(void, _dynamicImport, (JSContext *ctx, int argc, JSValueConst *argv, JSValueConst *resolveFunc, JSValueConst *rejectFunc, const char* basename, const char* filename), {
     return Module.dynamicImport(ctx, argc, argv, resolveFunc, rejectFunc, basename, filename);
 });
@@ -30,15 +26,6 @@ JSValue dispatch(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *
     const char* result = _dispatch(action, key, actionArgs);
     if (result == NULL) {
         return JS_UNDEFINED;
-    }
-    if (result[0] == 'p') { // is promise
-        const char* promiseId = result;
-        JSValue* callbacks = malloc(sizeof(JSValue) * 2);
-        JSValue promise = JS_NewPromiseCapability(ctx, callbacks);
-        _setPromiseCallbacks(key, promiseId, &callbacks[0], &callbacks[1]);
-        // _setPromiseCallbacks should copy promiseId
-        free((void*)promiseId);
-        return promise;
     }
     JSValue value = JS_ParseJSON(ctx, result, strlen(result), "");
     // JS_ParseJSON made a copy, we can safely free memory now
