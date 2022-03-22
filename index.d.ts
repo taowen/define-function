@@ -1,5 +1,6 @@
 declare function defineFunction<T extends (...args: any[]) => any>(script: string, options?: {
-  timeout?: number
+  timeout?: number,
+  disposeManually?: boolean,
 }): Promise<T>;
 declare interface Context {
   def: typeof defineFunction;

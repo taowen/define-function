@@ -162,13 +162,26 @@ async function test10() {
     ctx.dispose();
 }
 
+async function test11() {
+    const { context } = require('./index.node');
+    const ctx = context({ global: { setTimeout }});
+    const f = await ctx.def(`
+    setTimeout(() => {
+        console.log('setTimeout 0');
+    }, 0);
+    `)
+    f();
+    ctx.dispose();
+}
+
 async function main() {
-    await Promise.all([test1(), test2(), test3(), test4(), test6()])
-    await test5();
-    await test7();
+    // await Promise.all([test1(), test2(), test3(), test4(), test6()])
+    // await test5();
+    // await test7();
     await test8();
-    await test9();
-    await test10();
+    // await test9();
+    // await test10();
+    // await test11();
 }
 
 main();

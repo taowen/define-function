@@ -29,6 +29,7 @@ class Context {
     callbacks = {};
     ctx = undefined;
     moduleContents = {};
+    disposables = [];
 
     constructor(options) {
         this.options = options;
@@ -47,6 +48,9 @@ class Context {
             if (rejectFunc) {
                 wasm._freeJsValue(this.ctx, rejectFunc);
             }
+        }
+        for (const disposable of this.disposables) {
+            disposable.dispose();
         }
         for (const pModuleContent of Object.values(this.moduleContents)) {
             wasm._free(pModuleContent);
@@ -86,8 +90,8 @@ class Context {
         const obj = global[arguments[0]] = global[arguments[0]] || {};
         for (let i = 1; i < arguments.length; i+=2) {
             obj[arguments[i]] = arguments[i+1];
-        }`);
-        f(...args);
+        }`, { disposeManually: true });
+        this.disposables.push(f(...args));
     }
 
     async dynamicImport({ctx, argc, argv, resolveFunc, rejectFunc, basename, filename }) {
@@ -196,16 +200,7 @@ class Context {
                 throw new Error('context has been disposed');
             }
             const key = `key${nextId++}`;
-            let hasCallback = false;
-            const encodedArgs = [];
-            for (const arg of args) {
-                if (typeof arg === 'function') {
-                    hasCallback = true;
-                    encodedArgs.push({ __f__: true });
-                } else {
-                    encodedArgs.push(arg);
-                }
-            }
+            const encodedArgs = args.map(arg => typeof arg === 'function' ? { __f__: true} : arg);
             const pScript = allocateUTF8(`
             (() => {
                 const __key = '${key}';
@@ -239,7 +234,7 @@ class Context {
                 }
             })();
             `);
-            const invocation = invocations[key] = new Invocation({ args, callbacks: this.callbacks, ctx: this.ctx}, options?.timeout);
+            const invocation = invocations[key] = new Invocation({ args, callbacks: this.callbacks, ctx: this.ctx, key}, options?.timeout);
             const pError = wasm._eval(this.ctx, pScript);
             if (pError) {
                 throw new Error(wasm.UTF8ToString(pError));
@@ -250,11 +245,14 @@ class Context {
                 } catch (e) {
                     // ignore
                 } finally {
-                    if (!hasCallback) {
-                        delete invocations[key];
+                    if (!options?.disposeManually) {
+                        invocation.dispose();
                     }
                 }
             })();
+            if (options?.disposeManually) {
+                return invocation;
+            }
             return invocation.syncResult();
         }
     }
@@ -269,6 +267,7 @@ class Invocation {
     args;
     callbacks;
     ctx;
+    key;
 
     constructor(init, timeout) {
         Object.assign(this, init);
@@ -289,6 +288,10 @@ class Invocation {
                 }
             })()]);
         };
+    }
+
+    dispose() {
+        delete invocations[this.key];
     }
 
     invoke(invokeArgs) {
