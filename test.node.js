@@ -164,13 +164,19 @@ async function test10() {
 
 async function test11() {
     const { context } = require('./index.node');
-    const ctx = context({ global: { setTimeout }});
+    const ctx = context({ global: { 
+        setTimeout: (cb, ms) => {
+            setTimeout(cb, ms)
+        },
+        console
+    }});
     const f = await ctx.def(`
     setTimeout(() => {
-        console.log('setTimeout 0');
+        console.log('callback');
     }, 0);
     `)
     f();
+    await new Promise(resolve => setTimeout(resolve, 100));
     ctx.dispose();
 }
 
@@ -181,7 +187,7 @@ async function main() {
     await test8();
     await test9();
     await test10();
-    // await test11();
+    await test11();
 }
 
 main();

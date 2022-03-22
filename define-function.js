@@ -105,6 +105,12 @@ class Context {
         }
     }
 
+    asCallback(callbackId) {
+        return (...args) => {
+            return this.invokeCallback(callbackId, args);
+        }
+    }
+
     async inject(target, obj) {
         if (!global) {
             return;
@@ -113,7 +119,9 @@ class Context {
         for (const [k, v] of Object.entries(obj)) {
             if (typeof v === 'function') {
                 args.push(k);
-                args.push(v.bind(obj))
+                args.push((...args) => {
+                    return v.apply(obj, args.map(arg => arg && arg.__f__ ? this.asCallback(arg.__f__) : arg));
+                })
             } else {
                 args.push(k);
                 args.push(v);
@@ -245,7 +253,10 @@ class Context {
                     // the argument is a function
                     if (arg && arg.__f__) {
                         return function(...args) {
-                            const invokeResult = dispatch('invoke', {slot:i, args});
+                            const invokeResult = dispatch('invoke', {
+                                slot:i, 
+                                args: args.map(arg => typeof arg === 'function' ? { __f__: global.__s__.wrapCallback(arg) } : arg)
+                            });
                             if (invokeResult && invokeResult.__p__) {
                                 return global.__s__.getAndDeletePromise(invokeResult.__p__);
                             }
