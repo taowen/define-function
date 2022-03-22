@@ -180,6 +180,31 @@ async function test11() {
     ctx.dispose();
 }
 
+async function test12() {
+    const { context } = require('./index.node');
+    const ctx = context({ global: { 
+        console
+    }});
+    await ctx.load(`
+    const consoleLog = console.log;
+    global.console.log = (...args) => {
+        try {
+            JSON.stringify(args)
+        } catch(e) {
+            consoleLog('ignore console.log with data that can not JSON.stringify: ' + e);
+            return;
+        }
+        consoleLog(...args);
+    }`);
+    const f = await ctx.def(`
+    let a = {};
+    a.b = a;
+    console.log('hello', a);
+    `)
+    f();
+    ctx.dispose();
+}
+
 async function main() {
     await Promise.all([test1(), test2(), test3(), test4(), test6()])
     await test5();
@@ -188,6 +213,7 @@ async function main() {
     await test9();
     await test10();
     await test11();
+    await test12();
 }
 
 main();

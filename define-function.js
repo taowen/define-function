@@ -280,12 +280,12 @@ class Context {
                     if (result && result.then && result.catch) {
                         result
                             .then(v => { dispatch('setSuccess', v); })
-                            .catch(e => { dispatch('setFailure', '' + e); })
+                            .catch(e => { dispatch('setFailure', '' + e + '' + e.stack); })
                     } else {
                         dispatch('setSuccess', result);
                     }
                 } catch(e) {
-                    dispatch('setFailure', "" + e);
+                    dispatch('setFailure', "" + e + "" + e.stack);
                 }
             })();
             `);
