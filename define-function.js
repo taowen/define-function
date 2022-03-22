@@ -107,7 +107,14 @@ class Context {
 
     asCallback(callbackId) {
         return (...args) => {
-            return this.invokeCallback(callbackId, args);
+            if (!this.ctx) {
+                return;
+            }
+            try {
+                return this.invokeCallback(callbackId, args);
+            } finally {
+                this.deleteCallback(callbackId);
+            }
         }
     }
 
