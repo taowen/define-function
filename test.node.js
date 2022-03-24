@@ -205,6 +205,23 @@ async function test12() {
     ctx.dispose();
 }
 
+async function test13() {
+    const { context } = require('./index.node');
+    const ctx = context({ global: { 
+        someCallback() {
+            console.log(ctx.currentStack);
+        }
+    }});
+    await ctx.load(`
+    function someFunction() {
+        someCallback()
+    }
+    __s__.inspect('someObj', { a: 'b' });
+    someFunction();
+    `);
+    ctx.dispose();
+}
+
 async function main() {
     await Promise.all([test1(), test2(), test3(), test4(), test6()])
     await test5();
@@ -214,6 +231,7 @@ async function main() {
     await test10();
     await test11();
     await test12();
+    await test13();
 }
 
 main();

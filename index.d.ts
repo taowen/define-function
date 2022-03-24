@@ -8,6 +8,7 @@ declare interface Context {
     filename?: string,
     meta?: Record<string, any>
   }): Promise<any>;
+  currentStack: string;
   dispose(): void;
 }
 declare namespace defineFunction {

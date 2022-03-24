@@ -38,10 +38,13 @@ class Context {
         this.ctx = wasm._newContext();
         contexts.set(this.ctx, this);
         this.def(`
+            const [inspect] = arguments;
             global.__s__ = global.__s__ || {
                 nextId: 1,
                 promises: new Map(),
                 callbacks: new Map(),
+                inspectingObjects: new Map(),
+                currentStack: '',
                 createPromise() {
                     const promiseId = this.nextId++;
                     const result = { __p__: promiseId };
@@ -70,12 +73,56 @@ class Context {
                 },
                 deleteCallback(callbackId) {
                     this.callbacks.delete(callbackId);
+                },
+                inspect(msg, obj) {
+                    const objId = this.nextId++;
+                    this.inspectingObjects.set(objId, obj);
+                    inspect(msg, typeof obj === 'object' ? { __o__: objId, keys: Reflect.ownKeys(obj) } : obj);
+                },
+                getInspectingObjectProp(objId, prop) {
+                    const val = this.inspectingObjects.get(objId)[prop];
+                    if (typeof val === 'object') {
+                        const valObjId = this.nextId++;
+                        this.inspectingObjects.set(valObjId, val);
+                        return { __o__: valObjId, keys: Reflect.ownKeys(val) };
+                    }
+                    return val;
+                },
+                getInspectingObjectKeys(objId) {
+                    return Reflect.ownKeys(this.inspectingObjects.get(objId));
                 }
             };        
-        `)();
+        `, { disposeManually: true })(this.inspect.bind(this));
         this.createPromise = this.def(`return __s__.createPromise()`);
         this.invokeCallback = this.def(`return __s__.invokeCallback(...arguments)`);
         this.deleteCallback = this.def(`return __s__.deleteCallback(...arguments)`);
+        this.getInspectingObjectProp = this.def(`return __s__.getInspectingObjectProp(...arguments)`);
+        this.currentStack = this.def(`return __s__.currentStack`);
+    }
+
+    inspect(msg, obj) {
+        obj = this.wrapProxy(obj);
+        console.warn('inspecting...', msg, obj);
+        debugger;
+    }
+
+    wrapProxy(obj) {
+        if (!obj) {
+            return obj;
+        }
+        if (!obj.__o__) {
+            return obj;
+        }
+        const proxy = {};
+        for (const key of obj.keys) {
+            Object.defineProperty(proxy, key, {
+                enumerable: true,
+                get: () => {
+                    return this.getInspectingObjectProp(obj.__o__, key);
+                }
+            });
+        }
+        return proxy;
     }
 
     dispose() {
@@ -198,7 +245,9 @@ class Context {
         const pMeta = allocateUTF8(JSON.stringify(meta));
         const pError = wasm._load(this.ctx, pScript, pScriptName, pMeta);
         if (pError) {
-            throw new Error(wasm.UTF8ToString(pError));
+            const error = new Error(wasm.UTF8ToString(pError));
+            wasm._free(pError);
+            throw error;
         }
         if (!this._loadModule) {
             this._loadModule = await this.def(`
@@ -254,6 +303,7 @@ class Context {
                 const __key = '${key}';
                 const __args = ${JSON.stringify(encodedArgs)};
                 function dispatch(action, args) {
+                    __s__.currentStack = new Error().stack;
                     return __dispatch(action, __key, JSON.stringify(args));
                 }
                 function decodeArg(arg, i) {
@@ -292,7 +342,9 @@ class Context {
             const invocation = invocations[key] = new Invocation({ args, context: this, key}, options?.timeout);
             const pError = wasm._eval(this.ctx, pScript);
             if (pError) {
-                throw new Error(wasm.UTF8ToString(pError));
+                const error = new Error(wasm.UTF8ToString(pError));
+                wasm._free(pError);
+                throw error;
             }
             (async () => {
                 try {
@@ -479,6 +531,9 @@ module.exports = function (wasmProvider) {
                     await ctx.initGlobal(contextOptions?.global);
                 }
                 await ctx.require(basename, filename)
+            },
+            get currentStack() {
+                return ctx.currentStack();
             },
             dispose() {
                 if (ctx) {

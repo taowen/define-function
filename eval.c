@@ -16,6 +16,30 @@ EM_JS(const char*, _getModuleContent, (JSContext *ctx, const char* filename), {
     return Module.getModuleContent(ctx, filename);
 });
 
+char *mergeStr(const char *a, const char *b) {
+  int aLen = strlen(a);
+  int bLen = strlen(b);
+  char *ret = malloc(aLen + bLen + 1);
+  for (int i = 0; i < aLen; i++) {
+      ret[i] = a[i];
+  }
+  for (int i = 0; i < bLen; i++) {
+      ret[aLen + i] = b[i];
+  }
+  ret[aLen + bLen] = 0;
+  return ret;
+}
+
+char *dumpException(JSContext* ctx) {
+    JSValue realException = JS_GetException(ctx);
+    const char* errorMessage = JS_ToCString(ctx, realException);
+    JSValue stack = JS_GetProperty(ctx, realException, JS_NewAtom(ctx, "stack"));
+    const char* stackStr = JS_ToCString(ctx, stack);
+    char* merged = mergeStr(errorMessage, stackStr);
+    // malloc memory need to be freed by caller
+    return merged;
+}
+
 JSValue dispatch(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv, int magic, JSValue *func_data) {
     const char* action = JS_ToCString(ctx, argv[0]);
     JS_FreeCString(ctx, action);
@@ -128,11 +152,7 @@ EMSCRIPTEN_KEEPALIVE
 const char* eval(JSContext* ctx, char* str) {
     JSValue result = JS_Eval(ctx, str, strlen(str), "<eval>", JS_EVAL_TYPE_GLOBAL);
     if (JS_IsException(result)) {
-		JSValue realException = JS_GetException(ctx);
-        free((void*)str);
-        const char* errorMessage = JS_ToCString(ctx, realException);
-        JS_FreeCString(ctx, errorMessage);
-		return errorMessage;
+		return dumpException(ctx);
 	}
     JS_FreeValue(ctx, result);
     js_std_loop(ctx);
@@ -147,17 +167,15 @@ __exception int JS_CopyDataProperties(JSContext *ctx,
                                              JSValueConst source,
                                              JSValueConst excluded,
                                              BOOL setprop);
+
 EMSCRIPTEN_KEEPALIVE
 const char* load(JSContext* ctx, char* str, const char* filename, const char* meta) {
     JSValue result = JS_Eval(ctx, str, strlen(str), filename, JS_EVAL_TYPE_MODULE | JS_EVAL_FLAG_COMPILE_ONLY);
     if (JS_IsException(result)) {
-		JSValue realException = JS_GetException(ctx);
         free((void*)str);
         free((void*)filename);
         free((void*)meta);
-        const char* errorMessage = JS_ToCString(ctx, realException);
-        JS_FreeCString(ctx, errorMessage);
-		return errorMessage;
+		return dumpException(ctx);
 	}
     free((void*)str);
     free((void*)filename);
@@ -168,16 +186,13 @@ const char* load(JSContext* ctx, char* str, const char* filename, const char* me
     if (JS_CopyDataProperties(ctx, metaObj, metaObj2, JS_UNDEFINED, TRUE)) {
         JS_FreeValue(ctx, metaObj);
         JS_FreeValue(ctx, metaObj2);
-        return "failed to copy meta";
+        return strdup("failed to copy meta");
     }
     result = JS_EvalFunction(ctx, result);
     JS_FreeValue(ctx, metaObj);
     JS_FreeValue(ctx, metaObj2);
     if (JS_IsException(result)) {
-		JSValue realException = JS_GetException(ctx);
-        const char* errorMessage = JS_ToCString(ctx, realException);
-        JS_FreeCString(ctx, errorMessage);
-		return errorMessage;
+		return dumpException(ctx);
 	}
     JS_FreeValue(ctx, result);
     js_std_loop(ctx);
@@ -193,12 +208,6 @@ const char* call(JSContext* ctx, JSValue* pFunc, const char* args) {
         free((void*)args);
     }
     JSValue result = JS_Call(ctx, *pFunc, JS_UNDEFINED, 1, &argsVal);
-    if (JS_IsException(result)) {
-		JSValue realException = JS_GetException(ctx);
-        const char* errorMessage = JS_ToCString(ctx, realException);
-        JS_FreeCString(ctx, errorMessage);
-		return errorMessage;
-	}
     JS_FreeValue(ctx, result);
     js_std_loop(ctx);
     return 0;
