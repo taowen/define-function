@@ -177,7 +177,7 @@ class Context {
                     args = args.map(arg => arg && arg.__f__ ? this.asCallback(arg.__f__) : arg);
                     if (args[0] && typeof args[0] === 'object') {
                         for (const [k, v] of Object.entries(args[0])) {
-                            args[0][k] = v.__f__ ? this.asCallback(v.__f__) : v;
+                            args[0][k] = v?.__f__ ? this.asCallback(v.__f__) : v;
                         }
                     }
                     return v.apply(obj, args);
@@ -274,7 +274,7 @@ class Context {
         }
         const loadedModule = JSON.parse(await this._loadModule(filename));
         for (const [k, v] of Object.entries(loadedModule)) {
-            if (v && v.__f__) {
+            if (v?.__f__) {
                 loadedModule[k] = this.invokeModuleExport.bind(this, filename, k);
             }
         }
