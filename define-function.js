@@ -81,15 +81,12 @@ class Context {
                 },
                 getInspectingObjectProp(objId, prop) {
                     const val = this.inspectingObjects.get(objId)[prop];
-                    if (typeof val === 'object') {
+                    if (val && typeof val === 'object') {
                         const valObjId = this.nextId++;
                         this.inspectingObjects.set(valObjId, val);
                         return { __o__: valObjId, keys: Reflect.ownKeys(val) };
                     }
                     return val;
-                },
-                getInspectingObjectKeys(objId) {
-                    return Reflect.ownKeys(this.inspectingObjects.get(objId));
                 }
             };        
         `, { disposeManually: true })(this.inspect.bind(this));
@@ -118,7 +115,7 @@ class Context {
             Object.defineProperty(proxy, key, {
                 enumerable: true,
                 get: () => {
-                    return this.getInspectingObjectProp(obj.__o__, key);
+                    return this.wrapProxy(this.getInspectingObjectProp(obj.__o__, key));
                 }
             });
         }
@@ -157,11 +154,7 @@ class Context {
             if (!this.ctx) {
                 return;
             }
-            try {
-                return this.invokeCallback(callbackId, args);
-            } finally {
-                this.deleteCallback(callbackId);
-            }
+            return this.invokeCallback(callbackId, args);
         }
     }
 
