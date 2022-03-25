@@ -222,6 +222,27 @@ async function test13() {
     ctx.dispose();
 }
 
+async function test14() {
+    const { context } = require('./index.node');
+    const ctx = context({ global: { 
+        console,
+        wx: {
+            request(options) {
+                options.success('hello');
+            }
+        }
+    }});
+    await ctx.load(`
+    wx.request({
+        url: 'http://baidu.com',
+        success(data) {
+            console.log(data);
+        }
+    })
+    `);
+    ctx.dispose();
+}
+
 async function main() {
     await Promise.all([test1(), test2(), test3(), test4(), test6()])
     await test5();
@@ -232,6 +253,7 @@ async function main() {
     await test11();
     await test12();
     await test13();
+    await test14();
 }
 
 main();

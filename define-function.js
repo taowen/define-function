@@ -174,7 +174,13 @@ class Context {
             if (typeof v === 'function') {
                 args.push(k);
                 args.push((...args) => {
-                    return v.apply(obj, args.map(arg => arg && arg.__f__ ? this.asCallback(arg.__f__) : arg));
+                    args = args.map(arg => arg && arg.__f__ ? this.asCallback(arg.__f__) : arg);
+                    if (args[0] && typeof args[0] === 'object') {
+                        for (const [k, v] of Object.entries(args[0])) {
+                            args[0][k] = v.__f__ ? this.asCallback(v.__f__) : v;
+                        }
+                    }
+                    return v.apply(obj, args);
                 })
             } else {
                 args.push(k);
@@ -310,10 +316,13 @@ class Context {
                     // the argument is a function
                     if (arg && arg.__f__) {
                         return function(...args) {
-                            const invokeResult = dispatch('invoke', {
-                                slot:i, 
-                                args: args.map(arg => typeof arg === 'function' ? { __f__: global.__s__.wrapCallback(arg) } : arg)
-                            });
+                            args = args.map(arg => typeof arg === 'function' ? { __f__: global.__s__.wrapCallback(arg) } : arg);
+                            if (args[0] && typeof args[0] === 'object') {
+                                for (const [k, v] of Object.entries(args[0])) {
+                                    args[0][k] = typeof v === 'function' ? { __f__: global.__s__.wrapCallback(v) } : v;
+                                }
+                            }
+                            const invokeResult = dispatch('invoke', { slot:i, args });
                             if (invokeResult && invokeResult.__p__) {
                                 return global.__s__.getAndDeletePromise(invokeResult.__p__);
                             }
