@@ -1,6 +1,6 @@
 {
     "name": "define-function",
-    "version": "1.0.11",
+    "version": "1.0.12",
     "repository": "https://github.com/taowen/define-function",
     "license": "MIT",
     "miniprogram": "wechat",
