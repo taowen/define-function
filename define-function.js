@@ -1,7 +1,6 @@
 let wasm = undefined;
 let nextId = 1;
 const contexts = new Map();
-const invocations = {};
 
 // import {a, b} from 'xxx'
 // import ab from 'xxx'
@@ -32,13 +31,13 @@ class Context {
     createPromise;
     invokeCallback;
     deleteCallback;
+    hostFunctions = new Map();
 
     constructor(options) {
         this.options = options;
         this.ctx = wasm._newContext();
         contexts.set(this.ctx, this);
-        this.def(`
-            const [inspect] = arguments;
+        this.loadSync(`
             global.__s__ = global.__s__ || {
                 nextId: 1,
                 promises: new Map(),
@@ -104,9 +103,16 @@ class Context {
                         return { __o__: valObjId, keys: Reflect.ownKeys(val) };
                     }
                     return val;
+                },
+                invokeHostFunction(hostFunctionToken, args) {
+                    const invokeResult = __invokeHostFunction(JSON.stringify(hostFunctionToken), JSON.stringify(args));
+                    if (invokeResult && invokeResult.__p__) {
+                        return this.getAndDeletePromise(invokeResult.__p__);
+                    }
+                    return invokeResult;
                 }
             };        
-        `, { disposeManually: true })(this.inspect.bind(this));
+        `);
         this.createPromise = this.def(`return __s__.createPromise()`);
         this.invokeCallback = this.def(`return __s__.invokeCallback(...arguments)`);
         this.deleteCallback = this.def(`return __s__.deleteCallback(...arguments)`);
@@ -248,13 +254,8 @@ class Context {
         await Promise.all(promises);
     }
 
-    async load(content, options) {
+    loadSync(content, options) {
         const filename = options?.filename || `<load${nextId++}>`;
-        const promises = [];
-        for (const importFrom of extractImportFroms(content)) {
-            promises.push(this.require(filename, importFrom));
-        }
-        await Promise.all(promises);
         const pScript = allocateUTF8(content);
         const pScriptName = allocateUTF8(filename)
         const meta = options?.meta || { url: filename };
@@ -265,6 +266,16 @@ class Context {
             wasm._free(pError);
             throw error;
         }
+    }
+
+    async load(content, options) {
+        const filename = options?.filename || `<load${nextId++}>`;
+        const promises = [];
+        for (const importFrom of extractImportFroms(content)) {
+            promises.push(this.require(filename, importFrom));
+        }
+        await Promise.all(promises);
+        this.loadSync(content, { ...options, filename });
         if (!this._loadModule) {
             this._loadModule = await this.def(`
             return (async() => {
@@ -299,19 +310,17 @@ class Context {
             if (!this.ctx) {
                 throw new Error('context has been disposed');
             }
-            const key = `key${nextId++}`;
-            const encodedArgs = args.map(arg => typeof arg === 'function' ? { __f__: true} : arg);
+            const invocation = new Invocation(this, options?.timeout);
+            const encodedArgs = args.map(arg => typeof arg === 'function' ? invocation.wrapHostFunction(arg) : arg);
             const pScript = allocateUTF8(`
             (() => {
-                const __key = '${key}';
+                const setSuccess = ${JSON.stringify(invocation.wrapHostFunction(invocation.setSuccess.bind(invocation)))};
+                const setFailure = ${JSON.stringify(invocation.wrapHostFunction(invocation.setFailure.bind(invocation)))};
                 const __args = ${JSON.stringify(encodedArgs)};
-                function dispatch(action, args) {
-                    __s__.currentStack = new Error().stack;
-                    return __dispatch(action, __key, JSON.stringify(args));
-                }
                 function decodeArg(arg, i) {
                     // the argument is a function
-                    if (arg && arg.__f__) {
+                    if (arg && arg.__h__) {
+                        const hostFunction = arg;
                         return function(...args) {
                             args = args.map(arg => typeof arg === 'function' ? global.__s__.wrapCallback(arg) : arg);
                             if (args[0] && typeof args[0] === 'object') {
@@ -319,11 +328,7 @@ class Context {
                                     args[0][k] = typeof v === 'function' ? global.__s__.wrapCallback(v) : v;
                                 }
                             }
-                            const invokeResult = dispatch('invoke', { slot:i, args });
-                            if (invokeResult && invokeResult.__p__) {
-                                return global.__s__.getAndDeletePromise(invokeResult.__p__);
-                            }
-                            return invokeResult;
+                            return __s__.invokeHostFunction(hostFunction, args);
                         }
                     }
                     return arg;
@@ -335,17 +340,16 @@ class Context {
                     const result = f.apply(undefined, __args.map((arg, i) => decodeArg(arg, i)));
                     if (result && result.then && result.catch) {
                         result
-                            .then(v => { dispatch('setSuccess', v); })
-                            .catch(e => { dispatch('setFailure', '' + e + '' + e.stack); })
+                            .then(v => { __s__.invokeHostFunction(setSuccess, [v]); })
+                            .catch(e => { __s__.invokeHostFunction(setFailure, ['' + e + '' + e.stack]); })
                     } else {
-                        dispatch('setSuccess', result);
+                        __s__.invokeHostFunction(setSuccess, [result]);
                     }
                 } catch(e) {
-                    dispatch('setFailure', "" + e + "" + e.stack);
+                    __s__.invokeHostFunction(setFailure, ["" + e + "" + e.stack]);
                 }
             })();
             `);
-            const invocation = invocations[key] = new Invocation({ args, context: this, key}, options?.timeout);
             const pError = wasm._eval(this.ctx, pScript);
             if (pError) {
                 const error = new Error(wasm.UTF8ToString(pError));
@@ -370,21 +374,62 @@ class Context {
         }
     }
 
+    wrapHostFunction(f) {
+        const hfId = nextId++;
+        this.hostFunctions.set(hfId, f);
+        return { __h__: hfId }
+    }
 
+    deleteHostFunction(hostFunctionToken) {
+        const hfId = hostFunctionToken.__h__;
+        if (!hfId) {
+            throw new Error('deleteHostFunction with invalid token: ' + hostFunctionToken);
+        }
+        this.hostFunctions.delete(hfId);
+    }
+
+    invokeHostFunction(hostFunctionToken, args) {
+        const hfId = hostFunctionToken.__h__;
+        if (!hfId) {
+            throw new Error('callHostFunction with invalid token: ' + hostFunctionToken);
+        }
+        const invokeResult = this.hostFunctions.get(hfId)(...args);
+        if (invokeResult && invokeResult.then && invokeResult.catch) {
+            const { __p__, resolve, reject } = this.createPromise();
+            invokeResult
+                .then(v => {
+                    if (this.ctx) {
+                        this.invokeCallback(resolve, [v]);
+                    }
+                })
+                .catch(e => {
+                    if (this.ctx) {
+                        this.invokeCallback(reject, ['' + e]);
+                    }
+                })
+                .finally(() => {
+                    if (this.ctx) {
+                        this.deleteCallback(resolve);
+                        this.deleteCallback(reject);
+                    }
+                });
+            return { __p__ };
+        }
+        return invokeResult;
+    }
 }
 
 class Invocation {
 
+    context;
     asyncResult;
     syncResult;
     resolveAsyncResult;
     rejectAsyncResult;
-    args;
-    context;
-    key;
+    hostFunctionTokens = [];
 
-    constructor(init, timeout) {
-        Object.assign(this, init);
+    constructor(context, timeout) {
+        this.context = context;
         this.asyncResult = new Promise((resolve, reject) => {
             this.resolveAsyncResult = resolve;
             this.rejectAsyncResult = reject;
@@ -405,34 +450,15 @@ class Invocation {
     }
 
     dispose() {
-        delete invocations[this.key];
+        for (const hostFunctionToken of this.hostFunctionTokens) {
+            this.context.deleteHostFunction(hostFunctionToken);
+        }
     }
 
-    invoke(invokeArgs) {
-        const invokeResult = this.args[invokeArgs.slot](...invokeArgs.args);
-        if (invokeResult && invokeResult.then && invokeResult.catch) {
-            const { __p__, resolve, reject } = this.context.createPromise();
-            invokeResult
-                .then(v => {
-                    if (this.context.ctx) {
-                        this.context.invokeCallback(resolve, v);
-                    }
-                })
-                .catch(e => {
-                    if (this.context.ctx) {
-                        this.context.invokeCallback(reject, '' + e);
-                    }
-                })
-                .finally(() => {
-                    if (this.context.ctx) {
-                        this.context.deleteCallback(resolve);
-                        this.context.deleteCallback(reject);
-                    }
-                });
-            return allocateUTF8(JSON.stringify({ __p__ }));
-        }
-        // eval.c dispatch will free this memory
-        return allocateUTF8(JSON.stringify(invokeResult));
+    wrapHostFunction(f) {
+        const hostFunctionToken = this.context.wrapHostFunction(f);
+        this.hostFunctionTokens.push(hostFunctionToken);
+        return hostFunctionToken;
     }
 
     setSuccess(value) {
@@ -459,12 +485,6 @@ module.exports = function (wasmProvider) {
     async function loadWasm(options) {
         if (!wasm) {
             wasm = await wasmProvider(options);
-            wasm.dispatch = (encodedAction, encodedKey, encodedArgs) => {
-                const action = wasm.UTF8ToString(encodedAction);
-                const args = wasm.UTF8ToString(encodedArgs);
-                const key = wasm.UTF8ToString(encodedKey);
-                return invocations[key][action](args === 'undefined' ? undefined : JSON.parse(args));
-            }
             wasm.dynamicImport = (ctx, argc, argv, resolveFunc, rejectFunc, basename, filename) => {
                 basename = wasm.UTF8ToString(basename);
                 filename = wasm.UTF8ToString(filename);
@@ -482,9 +502,20 @@ module.exports = function (wasmProvider) {
                 filename = wasm.UTF8ToString(filename);
                 const context = contexts.get(ctx);
                 if (!context) {
-                    throw new Error(`failed to getModuleContent of ${filename}`)
+                    throw new Error(`getModuleContent of ${filename} missing context`)
                 }
                 return context.moduleContents[filename];
+            }
+            wasm.invokeHostFunction = (ctx, token, args) => {
+                token = wasm.UTF8ToString(token);
+                args = wasm.UTF8ToString(args);
+                const context = contexts.get(ctx);
+                if (!context) {
+                    throw new Error(`invokeHostFunction missing context`);
+                }
+                const result = JSON.stringify(context.invokeHostFunction(JSON.parse(token), JSON.parse(args)));
+                // eval.c invokeHostFunction will free this memory
+                return allocateUTF8(result);
             }
         }
         return wasm;
@@ -542,6 +573,9 @@ module.exports = function (wasmProvider) {
             },
             get currentStack() {
                 return ctx.currentStack();
+            },
+            wrapHostFunction(f) {
+                return ctx.wrapHostFunction(f);
             },
             dispose() {
                 if (ctx) {

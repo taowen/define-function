@@ -4,8 +4,8 @@
 #include "./quickjs/quickjs.h"
 #include "./quickjs/cutils.h"
 
-EM_JS(const char*, _dispatch, (const char* action, const char* key, const char* args), {
-    return Module.dispatch(action, key, args);
+EM_JS(const char*, _invokeHostFunction, (JSContext *ctx, const char* token, const char* args), {
+    return Module.invokeHostFunction(ctx, token, args);
 });
 
 EM_JS(void, _dynamicImport, (JSContext *ctx, int argc, JSValueConst *argv, JSValueConst *resolveFunc, JSValueConst *rejectFunc, const char* basename, const char* filename), {
@@ -40,14 +40,12 @@ char *dumpException(JSContext* ctx) {
     return merged;
 }
 
-JSValue dispatch(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv, int magic, JSValue *func_data) {
-    const char* action = JS_ToCString(ctx, argv[0]);
-    JS_FreeCString(ctx, action);
-    const char* key = JS_ToCString(ctx, argv[1]);
-    JS_FreeCString(ctx, key);
-    const char* actionArgs = JS_ToCString(ctx, argv[2]);
-    JS_FreeCString(ctx, actionArgs);
-    const char* result = _dispatch(action, key, actionArgs);
+JSValue invokeHostFunction(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv, int magic, JSValue *func_data) {
+    const char* hostFunctionToken = JS_ToCString(ctx, argv[0]);
+    JS_FreeCString(ctx, hostFunctionToken);
+    const char* hostFunctionArgs = JS_ToCString(ctx, argv[1]);
+    JS_FreeCString(ctx, hostFunctionArgs);
+    const char* result = _invokeHostFunction(ctx, hostFunctionToken, hostFunctionArgs);
     if (result == NULL) {
         return JS_UNDEFINED;
     }
@@ -93,8 +91,8 @@ JSContext* newContext() {
     JS_SetModuleLoaderFunc(runtime, NULL, js_module_loader, NULL);
     JSContext* ctx = JS_NewContext(runtime);
     JSValue global = JS_GetGlobalObject(ctx);
-    JSValue dispatchFunc = JS_NewCFunctionData(ctx, &dispatch, /* min argc */0, /* unused magic */0, /* func_data len */0, 0);
-    JS_SetPropertyStr(ctx, global, "__dispatch", dispatchFunc);
+    JS_SetPropertyStr(ctx, global, "__invokeHostFunction", 
+        JS_NewCFunctionData(ctx, &invokeHostFunction, /* min argc */0, /* unused magic */0, /* func_data len */0, 0));
     JS_SetPropertyStr(ctx, global, "global", JS_GetGlobalObject(ctx));
     JS_FreeValue(ctx, global);
     return ctx;

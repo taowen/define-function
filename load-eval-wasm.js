@@ -221,16 +221,16 @@ var Module = (() => {
    throw new Error('missing instantiateWasm');
   }
   
-  function _dispatch(action, key, args) {
-   return Module.dispatch(action, key, args);
-  }
-
   function _dynamicImport(ctx, argc, argv, resolveFunc, rejectFunc, basename, filename) {
     return Module.dynamicImport(ctx, argc, argv, resolveFunc, rejectFunc, basename, filename);
   }
 
   function _getModuleContent(ctx, module_name) {
     return Module.getModuleContent(ctx, module_name);
+  }
+
+  function _invokeHostFunction(ctx, token, args) {
+    return Module.invokeHostFunction(ctx, token, args);
   }
   
   function callRuntimeCallbacks(callbacks) {
@@ -382,9 +382,9 @@ var Module = (() => {
 
   var asmLibraryArg = {
     "a": ___assert_fail,
-    "j": _dispatch,
     "h": _dynamicImport,
     "i": _getModuleContent,
+    "j": _invokeHostFunction,
     "e": __localtime_js,
     "f": __tzset_js,
     "b": _abort,
