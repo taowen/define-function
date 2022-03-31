@@ -27,7 +27,6 @@ class Context {
     options = undefined;
     ctx = undefined;
     moduleContents = {};
-    disposables = [];
     createPromise;
     invokeCallback;
     deleteCallback;
@@ -45,6 +44,7 @@ class Context {
                 callbacksLookup: new Map(),
                 inspectingObjects: new Map(),
                 currentStack: '',
+                hostInspect: undefined, // inject later
                 createPromise() {
                     const promiseId = this.nextId++;
                     const result = { __p__: promiseId };
@@ -93,7 +93,7 @@ class Context {
                 inspect(msg, obj) {
                     const objId = this.nextId++;
                     this.inspectingObjects.set(objId, obj);
-                    inspect(msg, typeof obj === 'object' ? { __o__: objId, keys: Reflect.ownKeys(obj) } : obj);
+                    this.hostInspect(msg, typeof obj === 'object' ? { __o__: objId, keys: Reflect.ownKeys(obj) } : obj);
                 },
                 getInspectingObjectProp(objId, prop) {
                     const val = this.inspectingObjects.get(objId)[prop];
@@ -105,6 +105,16 @@ class Context {
                     return val;
                 },
                 invokeHostFunction(hostFunctionToken, args) {
+                    if (!hostFunctionToken.nowrap) {
+                        args = args.map(arg => typeof arg === 'function' ? this.wrapCallback(arg) : arg);
+                        if (args[0] && typeof args[0] === 'object') {
+                            for (const [k, v] of Object.entries(args[0])) {
+                                if (typeof v === 'function') {
+                                    args[0][k] = this.wrapCallback(v);
+                                }
+                            }
+                        }
+                    }
                     const invokeResult = __invokeHostFunction(JSON.stringify(hostFunctionToken), JSON.stringify(args));
                     if (invokeResult && invokeResult.__p__) {
                         return this.getAndDeletePromise(invokeResult.__p__);
@@ -124,9 +134,6 @@ class Context {
         if (!this.ctx) {
             return; // already disposed
         }
-        for (const disposable of this.disposables) {
-            disposable.dispose();
-        }
         for (const pModuleContent of Object.values(this.moduleContents)) {
             wasm._free(pModuleContent);
         }
@@ -135,7 +142,7 @@ class Context {
         this.ctx = undefined;
     }
 
-    inspect(msg, obj) {
+    hostInspect(msg, obj) {
         obj = this.wrapProxy(obj);
         console.warn('inspecting...', msg, obj);
         debugger;
@@ -170,6 +177,7 @@ class Context {
                 await this.inject(k, v);
             }
         }
+        this.def(`__s__.hostInspect = arguments[0]`)(this.wrapHostFunction(this.hostInspect.bind(this), { nowrap: true }));
     }
 
     asCallback(callbackToken) {
@@ -189,15 +197,7 @@ class Context {
         for (const [k, v] of Object.entries(obj)) {
             if (typeof v === 'function') {
                 args.push(k);
-                args.push((...args) => {
-                    args = args.map(arg => arg?.__c__ ? this.asCallback(arg) : arg);
-                    if (args[0] && typeof args[0] === 'object') {
-                        for (const [k, v] of Object.entries(args[0])) {
-                            args[0][k] = v?.__c__ ? this.asCallback(v) : v;
-                        }
-                    }
-                    return v.apply(obj, args);
-                })
+                args.push(this.wrapHostFunction(v))
             } else {
                 args.push(k);
                 args.push(v);
@@ -207,8 +207,8 @@ class Context {
         const obj = global[arguments[0]] = global[arguments[0]] || {};
         for (let i = 1; i < arguments.length; i+=2) {
             obj[arguments[i]] = arguments[i+1];
-        }`, { disposeManually: true });
-        this.disposables.push(f(...args));
+        }`);
+        f(...args);
     }
 
     async dynamicImport({ctx, argc, argv, resolveFunc, rejectFunc, basename, filename }) {
@@ -314,20 +314,14 @@ class Context {
             const encodedArgs = args.map(arg => typeof arg === 'function' ? invocation.wrapHostFunction(arg) : arg);
             const pScript = allocateUTF8(`
             (() => {
-                const setSuccess = ${JSON.stringify(invocation.wrapHostFunction(invocation.setSuccess.bind(invocation)))};
-                const setFailure = ${JSON.stringify(invocation.wrapHostFunction(invocation.setFailure.bind(invocation)))};
+                const setSuccess = ${JSON.stringify(invocation.wrapHostFunction(invocation.setSuccess.bind(invocation), { nowrap: true }))};
+                const setFailure = ${JSON.stringify(invocation.wrapHostFunction(invocation.setFailure.bind(invocation), { nowrap: true }))};
                 const __args = ${JSON.stringify(encodedArgs)};
                 function decodeArg(arg, i) {
                     // the argument is a function
                     if (arg && arg.__h__) {
                         const hostFunction = arg;
                         return function(...args) {
-                            args = args.map(arg => typeof arg === 'function' ? global.__s__.wrapCallback(arg) : arg);
-                            if (args[0] && typeof args[0] === 'object') {
-                                for (const [k, v] of Object.entries(args[0])) {
-                                    args[0][k] = typeof v === 'function' ? global.__s__.wrapCallback(v) : v;
-                                }
-                            }
                             return __s__.invokeHostFunction(hostFunction, args);
                         }
                     }
@@ -362,28 +356,23 @@ class Context {
                 } catch (e) {
                     // ignore
                 } finally {
-                    if (!options?.disposeManually) {
-                        invocation.dispose();
-                    }
+                    invocation.dispose();
                 }
             })();
-            if (options?.disposeManually) {
-                return invocation;
-            }
             return invocation.syncResult();
         }
     }
 
-    wrapHostFunction(f) {
+    wrapHostFunction(f, extra) {
         const hfId = nextId++;
         this.hostFunctions.set(hfId, f);
-        return { __h__: hfId }
+        return { __h__: hfId, ...extra }
     }
 
     deleteHostFunction(hostFunctionToken) {
         const hfId = hostFunctionToken.__h__;
         if (!hfId) {
-            throw new Error('deleteHostFunction with invalid token: ' + hostFunctionToken);
+            throw new Error('deleteHostFunction with invalid token: ' + JSON.stringify(hostFunctionToken));
         }
         this.hostFunctions.delete(hfId);
     }
@@ -391,9 +380,24 @@ class Context {
     invokeHostFunction(hostFunctionToken, args) {
         const hfId = hostFunctionToken.__h__;
         if (!hfId) {
-            throw new Error('callHostFunction with invalid token: ' + hostFunctionToken);
+            throw new Error('callHostFunction with invalid token: ' + JSON.stringify(hostFunctionToken));
         }
-        const invokeResult = this.hostFunctions.get(hfId)(...args);
+        if (!hostFunctionToken.nowrap) {
+            args = args.map(arg => arg?.__c__ ? this.asCallback(arg) : arg);
+            if (args[0] && typeof args[0] === 'object') {
+                for (const [k, v] of Object.entries(args[0])) {
+                    if (v?.__c__) {
+                        args[0][k] = this.asCallback(v);
+                    }
+                }
+            }
+        }
+        const hostFunc = this.hostFunctions.get(hfId);
+        if (hostFunc === undefined) {
+            console.log(args);
+            throw new Error('host function not found: ' + JSON.stringify(hostFunctionToken));
+        }
+        const invokeResult = hostFunc(...args);
         if (invokeResult && invokeResult.then && invokeResult.catch) {
             const { __p__, resolve, reject } = this.createPromise();
             invokeResult
@@ -455,8 +459,8 @@ class Invocation {
         }
     }
 
-    wrapHostFunction(f) {
-        const hostFunctionToken = this.context.wrapHostFunction(f);
+    wrapHostFunction(f, extra) {
+        const hostFunctionToken = this.context.wrapHostFunction(f, extra);
         this.hostFunctionTokens.push(hostFunctionToken);
         return hostFunctionToken;
     }

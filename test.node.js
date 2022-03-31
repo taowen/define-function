@@ -207,7 +207,8 @@ async function test12() {
 
 async function test13() {
     const { context } = require('./index.node');
-    const ctx = context({ global: { 
+    const ctx = context({ global: {
+        console,
         someCallback() {
             console.log(ctx.currentStack);
         }
@@ -252,15 +253,8 @@ async function main() {
     await test10();
     await test11();
     await test12();
-    // await test13();
+    await test13();
     await test14();
-    // const { context } = require('./index.node');
-    // const ctx = context();
-    // const f = await ctx.def(`
-    // return __s__.invokeHostFunction(arguments[0], []);
-    // `)
-    // console.log(await f(ctx.wrapHostFunction(async () => 100)));
-    // ctx.dispose();
 }
 
 main();
