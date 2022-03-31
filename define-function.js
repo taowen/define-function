@@ -318,15 +318,14 @@ class Context {
                 throw new Error('context has been disposed');
             }
             const invocation = new Invocation(this, options?.timeout);
-            const encodedArgs = args.map(arg => typeof arg === 'function' ? invocation.wrapHostFunction(arg) : arg);
             const pScript = allocateUTF8(`
             (() => {
                 const setSuccess = ${JSON.stringify(invocation.wrapHostFunction(invocation.setSuccess.bind(invocation), { nowrap: true }))};
                 const setFailure = ${JSON.stringify(invocation.wrapHostFunction(invocation.setFailure.bind(invocation), { nowrap: true }))};
-                const __args = ${JSON.stringify(encodedArgs)};
+                const __args = ${JSON.stringify(args.map((arg, index) => typeof arg === 'function' ? invocation.wrapHostFunction(arg, { argIndex: index}) : arg))};
                 function decodeArg(arg, i) {
                     // the argument is a function
-                    if (arg && arg.__h__) {
+                    if (arg?.__h__) {
                         const hostFunction = arg;
                         return function(...args) {
                             return __s__.invokeHostFunction(hostFunction, args);
@@ -401,7 +400,6 @@ class Context {
         }
         const hostFunc = this.hostFunctions.get(hfId);
         if (hostFunc === undefined) {
-            console.log(args);
             throw new Error('host function not found: ' + JSON.stringify(hostFunctionToken));
         }
         const invokeResult = hostFunc(...args);
@@ -548,9 +546,13 @@ module.exports = function (wasmProvider) {
                 if (!context) {
                     throw new Error(`invokeHostFunction missing context`);
                 }
-                const result = JSON.stringify(context.invokeHostFunction(JSON.parse(token), JSON.parse(args)));
-                // eval.c invokeHostFunction will free this memory
-                return allocateUTF8(result);
+                try {
+                    const result = JSON.stringify(context.invokeHostFunction(JSON.parse(token), JSON.parse(args)));
+                    // eval.c invokeHostFunction will free this memory
+                    return allocateUTF8(result);
+                } catch(e) {
+                    return allocateUTF8(JSON.stringify({ __e__: e?.stack || `${e}`}));
+                }
             }
         }
         return wasm;

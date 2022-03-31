@@ -52,6 +52,11 @@ JSValue invokeHostFunction(JSContext *ctx, JSValueConst this_val, int argc, JSVa
     JSValue value = JS_ParseJSON(ctx, result, strlen(result), "");
     // JS_ParseJSON made a copy, we can safely free memory now
     free((void*)result);
+    JSValue errorMessage = JS_GetPropertyStr(ctx, value, "__e__");
+    if (!JS_IsUndefined(errorMessage)) {
+        JS_FreeValue(ctx, value);
+        return JS_Throw(ctx, errorMessage);
+    }
     return value;
 }
 

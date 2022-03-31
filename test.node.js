@@ -274,6 +274,22 @@ async function test15() {
     ctx.dispose();
 }
 
+async function test16() {
+    const { context } = require('./index.node');
+    const ctx = await context();
+    // should not save to global.cb, as arguments[0] will be disposed
+    await ctx.def(`global.cb = arguments[0]`)(() => 100);
+    try {
+        ctx.def(`return cb()`)()
+    } catch(e) {
+        // Error: host function not found: {"__h__":10,"argIndex":0}
+        if (!e.message.includes('argIndex')) {
+            assert.fail();
+        }
+    }
+    ctx.dispose();
+}
+
 async function main() {
     await Promise.all([test1(), test2(), test3(), test4(), test6()])
     await test5();
@@ -286,6 +302,7 @@ async function main() {
     await test13();
     await test14();
     await test15();
+    await test16();
 }
 
 main();
