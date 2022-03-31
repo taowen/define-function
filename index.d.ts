@@ -9,6 +9,8 @@ declare interface Context {
     meta?: Record<string, any>
   }): Promise<any>;
   currentStack: string;
+  wrapHostFunction(f: Function, options?: { returnsHostObject?: boolean; nowrap?: boolean; }): any;
+  inject(target: string, obj: Record<string, any>): void;
   dispose(): void;
 }
 declare namespace defineFunction {

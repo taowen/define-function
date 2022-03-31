@@ -45,6 +45,7 @@ class Context {
                 inspectingObjects: new Map(),
                 currentStack: '',
                 hostInspect: undefined, // inject later
+                deleteHostObject: undefined, // inject later
                 createPromise() {
                     const promiseId = this.nextId++;
                     const result = { __p__: promiseId };
@@ -120,6 +121,15 @@ class Context {
                         return this.getAndDeletePromise(invokeResult.__p__);
                     }
                     return invokeResult;
+                },
+                callMethod(hostObj, method, ...args) {
+                    return this.invokeHostFunction(hostObj, ['callMethod', method, args]);
+                },
+                getProp(hostObj, prop) {
+                    return this.invokeHostFunction(hostObj, ['getProp', prop]);
+                },
+                setProp(hostObj, prop, propVal) {
+                    return this.invokeHostFunction(hostObj, ['setProp', prop, propVal]);
                 }
             };        
         `);
@@ -128,6 +138,16 @@ class Context {
         this.deleteCallback = this.def(`return __s__.deleteCallback(...arguments)`);
         this.getInspectingObjectProp = this.def(`return __s__.getInspectingObjectProp(...arguments)`);
         this.currentStack = this.def(`return __s__.currentStack`);
+        if (options?.global) {
+            this.inject('global', options.global);
+            for (const [k, v] of Object.entries(options.global)) {
+                if (typeof v === 'object') {
+                    this.inject(k, v);
+                }
+            }
+        }
+        this.def(`__s__.hostInspect = arguments[0]`)(this.wrapHostFunction(this.hostInspect.bind(this), { nowrap: true }));
+        this.def(`__s__.deleteHostObject = arguments[0]`)(this.wrapHostFunction(this.deleteHostFunction.bind(this), { nowrap: true }));
     }
 
     dispose() {
@@ -167,19 +187,6 @@ class Context {
         return proxy;
     }
 
-    async initGlobal(global) {
-        if (!global) {
-            return;
-        }
-        await this.inject('global', global);
-        for (const [k, v] of Object.entries(global)) {
-            if (typeof v === 'object') {
-                await this.inject(k, v);
-            }
-        }
-        this.def(`__s__.hostInspect = arguments[0]`)(this.wrapHostFunction(this.hostInspect.bind(this), { nowrap: true }));
-    }
-
     asCallback(callbackToken) {
         return (...args) => {
             if (!this.ctx) {
@@ -189,7 +196,7 @@ class Context {
         }
     }
 
-    async inject(target, obj) {
+    inject(target, obj) {
         if (!global) {
             return;
         }
@@ -203,7 +210,7 @@ class Context {
                 args.push(v);
             }
         }
-        const f = await this.def(`
+        const f = this.def(`
         const obj = global[arguments[0]] = global[arguments[0]] || {};
         for (let i = 1; i < arguments.length; i+=2) {
             obj[arguments[i]] = arguments[i+1];
@@ -419,7 +426,31 @@ class Context {
                 });
             return { __p__ };
         }
+        if (hostFunctionToken.returnsHostObject) {
+            return this.wrapHostObject(invokeResult);
+        }
         return invokeResult;
+    }
+
+    wrapHostObject(val) {
+        if (!val) {
+            return val;
+        }
+        if (typeof val !== 'object') {
+            return val;
+        }
+        return this.wrapHostFunction((action, prop, args) => {
+            switch(action) {
+                case 'callMethod':
+                    return this.wrapHostObject(val[prop](...args));
+                case 'getProp':
+                    return this.wrapHostObject(val[prop]);
+                case 'setProp':
+                    val[prop] = args;
+                    return undefined;
+            }
+            throw new Error(`unknown action: ${action}`);
+        })
     }
 }
 
@@ -541,50 +572,30 @@ module.exports = function (wasmProvider) {
                     }
                 }
             }
-            if (options?.global) {
-                return ctx.initGlobal(options?.global).then(defAndCall);
-            } else {
-                return defAndCall();
-            }
+            return defAndCall();
         };
     };
-    defineFunction.context = (contextOptions) => { // share context between invocations
-        let ctx = undefined;
+    defineFunction.context = async (contextOptions) => { // share context between invocations
+        await loadWasm(contextOptions);
+        const ctx = new Context(contextOptions);
         return {
-            async def(script, options) {
-                if (!ctx) {
-                    await loadWasm(contextOptions);
-                    ctx = new Context(contextOptions);
-                    await ctx.initGlobal(contextOptions?.global);
-                }
+            def(script, options) {
                 return ctx.def(script, options);
             },
-            async load(script, options) {
-                if (!ctx) {
-                    await loadWasm(contextOptions);
-                    ctx = new Context(contextOptions);
-                    await ctx.initGlobal(contextOptions?.global);
-                }
-                return await ctx.load(script, options)
-            },
-            async require(basename, filename) {
-                if (!ctx) {
-                    await loadWasm(contextOptions);
-                    ctx = new Context(contextOptions);
-                    await ctx.initGlobal(contextOptions?.global);
-                }
-                await ctx.require(basename, filename)
+            load(script, options) {
+                return ctx.load(script, options)
             },
             get currentStack() {
                 return ctx.currentStack();
             },
-            wrapHostFunction(f) {
-                return ctx.wrapHostFunction(f);
+            inject(target, obj) {
+                ctx.inject(target, obj);
+            },
+            wrapHostFunction(f, extra) {
+                return ctx.wrapHostFunction(f, extra);
             },
             dispose() {
-                if (ctx) {
-                    ctx.dispose();
-                }
+                ctx.dispose();
             }
         }
     };

@@ -62,8 +62,8 @@ async function test5() {
 
 async function test6() {
     const { context } = require('./index.node');
-    const ctx = context();
-    const f = await ctx.def(`
+    const ctx = await context();
+    const f = ctx.def(`
     global.counter = (global.counter || 0)+1;
     return counter;
     `)
@@ -97,7 +97,7 @@ async function test7() {
 
 async function test8() {
     const { context } = require('./index.node');
-    const ctx = context({
+    const ctx = await context({
         async loadModuleContent(moduleName) {
             if (moduleName === 'xxx') {
                 return `export default 'hello'`
@@ -122,7 +122,7 @@ async function test8() {
 
 async function test9() {
     const { context } = require('./index.node');
-    const ctx = context();
+    const ctx = await context();
     const { hello, sayHello } = await ctx.load(`
     export const hello = 'world';
     export function sayHello() {
@@ -142,7 +142,7 @@ async function test9() {
 
 async function test10() {
     const { context } = require('./index.node');
-    const ctx = context({
+    const ctx = await context({
         loadModuleContent(moduleName) {
             if (moduleName !== 'someDir/b.js') {
                 assert.fail();
@@ -164,13 +164,13 @@ async function test10() {
 
 async function test11() {
     const { context } = require('./index.node');
-    const ctx = context({ global: { 
+    const ctx = await context({ global: { 
         setTimeout: (cb, ms) => {
             setTimeout(cb, ms)
         },
         console
     }});
-    const f = await ctx.def(`
+    const f = ctx.def(`
     setTimeout(() => {
         console.log('callback');
     }, 0);
@@ -182,7 +182,7 @@ async function test11() {
 
 async function test12() {
     const { context } = require('./index.node');
-    const ctx = context({ global: { 
+    const ctx = await context({ global: { 
         console
     }});
     await ctx.load(`
@@ -196,7 +196,7 @@ async function test12() {
         }
         consoleLog(...args);
     }`);
-    const f = await ctx.def(`
+    const f = ctx.def(`
     let a = {};
     a.b = a;
     console.log('hello', a);
@@ -207,8 +207,7 @@ async function test12() {
 
 async function test13() {
     const { context } = require('./index.node');
-    const ctx = context({ global: {
-        console,
+    const ctx = await context({ global: {
         someCallback() {
             console.log(ctx.currentStack);
         }
@@ -225,7 +224,7 @@ async function test13() {
 
 async function test14() {
     const { context } = require('./index.node');
-    const ctx = context({ global: { 
+    const ctx = await context({ global: { 
         console,
         wx: {
             request(options) {
@@ -244,6 +243,37 @@ async function test14() {
     ctx.dispose();
 }
 
+async function test15() {
+    const { context } = require('./index.node');
+    const ctx = await context();
+    ctx.inject('wx', {
+        createSelectorQuery: ctx.wrapHostFunction(() => {
+            return {
+                select(selector) {
+                    return { selector };
+                }
+            }
+        }, { returnsHostObject: true })
+    })
+    const ret = ctx.def(`
+    const query = wx.createSelectorQuery();
+    try {
+        const ret = __s__.callMethod(query, 'select', '#the-id');
+        try {
+            return __s__.getProp(ret, 'selector');
+        } finally {
+            __s__.deleteHostObject(ret);
+        }
+    } finally {
+        __s__.deleteHostObject(query);
+    }
+    `)();
+    if (ret !== '#the-id') {
+        assert.fail();
+    }
+    ctx.dispose();
+}
+
 async function main() {
     await Promise.all([test1(), test2(), test3(), test4(), test6()])
     await test5();
@@ -255,6 +285,7 @@ async function main() {
     await test12();
     await test13();
     await test14();
+    await test15();
 }
 
 main();
