@@ -114,6 +114,21 @@ class Context {
         this.currentStack = this.def(`return __s__.currentStack`);
     }
 
+    dispose() {
+        if (!this.ctx) {
+            return; // already disposed
+        }
+        for (const disposable of this.disposables) {
+            disposable.dispose();
+        }
+        for (const pModuleContent of Object.values(this.moduleContents)) {
+            wasm._free(pModuleContent);
+        }
+        wasm._freeContext(this.ctx);
+        contexts.delete(this.ctx);
+        this.ctx = undefined;
+    }
+
     inspect(msg, obj) {
         obj = this.wrapProxy(obj);
         console.warn('inspecting...', msg, obj);
@@ -139,21 +154,6 @@ class Context {
         return proxy;
     }
 
-    dispose() {
-        if (!this.ctx) {
-            return; // already disposed
-        }
-        for (const disposable of this.disposables) {
-            disposable.dispose();
-        }
-        for (const pModuleContent of Object.values(this.moduleContents)) {
-            wasm._free(pModuleContent);
-        }
-        wasm._freeContext(this.ctx);
-        contexts.delete(this.ctx);
-        this.ctx = undefined;
-    }
-
     async initGlobal(global) {
         if (!global) {
             return;
@@ -166,12 +166,12 @@ class Context {
         }
     }
 
-    asCallback(callbackId) {
+    asCallback(callbackToken) {
         return (...args) => {
             if (!this.ctx) {
                 return;
             }
-            return this.invokeCallback(callbackId, args);
+            return this.invokeCallback(callbackToken, args);
         }
     }
 
@@ -273,7 +273,7 @@ class Context {
                 const exports = {};
                 for(const [k, v] of Object.entries(m)) {
                     if (typeof v === 'function') {
-                        exports[k] = {__f__:true};
+                        exports[k] = __s__.wrapCallback(v);
                     } else {
                         exports[k] = v;
                     }
@@ -284,24 +284,11 @@ class Context {
         }
         const loadedModule = JSON.parse(await this._loadModule(filename));
         for (const [k, v] of Object.entries(loadedModule)) {
-            if (v?.__f__) {
-                loadedModule[k] = this.invokeModuleExport.bind(this, filename, k);
+            if (v?.__c__) {
+                loadedModule[k] = this.asCallback(v);
             }
         }
         return loadedModule;
-    }
-
-    async invokeModuleExport(moduleName, exportName, ...args) {
-        if (!this._invokeModuleExport) {
-            this._invokeModuleExport = await this.def(`
-            return (async() => {
-                const [moduleName, exportName, ...args] = arguments;
-                const m = await import(moduleName);
-                return m[exportName](...args);
-            })();
-            `)
-        }
-        return await this._invokeModuleExport(moduleName, exportName, ...args);
     }
 
     def(script, options) {
@@ -382,6 +369,8 @@ class Context {
             return invocation.syncResult();
         }
     }
+
+
 }
 
 class Invocation {
