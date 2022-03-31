@@ -43,6 +43,7 @@ class Context {
                 nextId: 1,
                 promises: new Map(),
                 callbacks: new Map(),
+                callbacksLookup: new Map(),
                 inspectingObjects: new Map(),
                 currentStack: '',
                 createPromise() {
@@ -55,8 +56,12 @@ class Context {
                     return result;
                 },
                 wrapCallback(callback) {
-                    const callbackId = this.nextId++;
-                    this.callbacks.set(callbackId, callback);
+                    let callbackId = this.callbacksLookup.get(callback);
+                    if (callbackId === undefined) {
+                        callbackId = this.nextId++;
+                        this.callbacks.set(callbackId, callback);
+                        this.callbacksLookup.set(callback, callbackId);
+                    }
                     return { __c__: callbackId };
                 },
                 getAndDeletePromise(promiseId) {
@@ -80,7 +85,11 @@ class Context {
                     if (!callbackId) {
                         throw new Error('deleteCallback with invalid token: ' + callbackToken);
                     }
-                    this.callbacks.delete(callbackId);
+                    let callback = this.callbacks.get(callbackId);
+                    if (callback !== undefined) {
+                        this.callbacks.delete(callbackId);
+                        this.callbacksLookup.delete(callback);
+                    }
                 },
                 inspect(msg, obj) {
                     const objId = this.nextId++;
