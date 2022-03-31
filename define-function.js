@@ -55,14 +55,14 @@ class Context {
                     }));
                     return result;
                 },
-                wrapCallback(callback) {
+                wrapCallback(callback, extra) {
                     let callbackId = this.callbacksLookup.get(callback);
                     if (callbackId === undefined) {
                         callbackId = this.nextId++;
                         this.callbacks.set(callbackId, callback);
                         this.callbacksLookup.set(callback, callbackId);
                     }
-                    return { __c__: callbackId };
+                    return { __c__: callbackId, ...extra };
                 },
                 getAndDeletePromise(promiseId) {
                     const promise = this.promises.get(promiseId);
@@ -72,7 +72,7 @@ class Context {
                 invokeCallback(callbackToken, args) {
                     const callbackId = callbackToken.__c__;
                     if (!callbackId) {
-                        throw new Error('invokeCallback with invalid token: ' + callbackToken);
+                        throw new Error('invokeCallback with invalid token: ' + JSON.stringify(callbackToken));
                     }
                     const callback = this.callbacks.get(callbackId);
                     if (!callback) {
@@ -83,7 +83,7 @@ class Context {
                 deleteCallback(callbackToken) {
                     const callbackId = callbackToken.__c__;
                     if (!callbackId) {
-                        throw new Error('deleteCallback with invalid token: ' + callbackToken);
+                        throw new Error('deleteCallback with invalid token: ' + JSON.stringify(callbackToken));
                     }
                     let callback = this.callbacks.get(callbackId);
                     if (callback !== undefined) {
@@ -107,11 +107,11 @@ class Context {
                 },
                 invokeHostFunction(hostFunctionToken, args) {
                     if (!hostFunctionToken.nowrap) {
-                        args = args.map(arg => typeof arg === 'function' ? this.wrapCallback(arg) : arg);
+                        args = args.map(arg => typeof arg === 'function' ? this.wrapCallback(arg, { once: true }) : arg);
                         if (args[0] && typeof args[0] === 'object') {
                             for (const [k, v] of Object.entries(args[0])) {
                                 if (typeof v === 'function') {
-                                    args[0][k] = this.wrapCallback(v);
+                                    args[0][k] = this.wrapCallback(v, { once: true });
                                 }
                             }
                         }
@@ -188,11 +188,24 @@ class Context {
     }
 
     asCallback(callbackToken) {
+        let calledOnce = false;
         return (...args) => {
             if (!this.ctx) {
                 return;
             }
-            return this.invokeCallback(callbackToken, args);
+            if (callbackToken.once) {
+                if (calledOnce) {
+                    throw new Error(`callback ${JSON.stringify(callbackToken)} can only be callback once, if need to callback multiple times, use __s__.wrapCallback to manage callback lifetime explicitly`)
+                }
+                calledOnce = true;
+            }
+            try {
+                return this.invokeCallback(callbackToken, args);
+            } finally {
+                if (callbackToken.once) {
+                    this.deleteCallback(callbackToken);
+                }
+            }
         }
     }
 

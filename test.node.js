@@ -290,6 +290,29 @@ async function test16() {
     ctx.dispose();
 }
 
+async function test17() {
+    const { context } = require('./index.node');
+    const ctx = await context({
+        global: {
+            setTimeout(cb) {
+                if(cb() !== 100) {
+                    assert.fail();
+                }
+                try {
+                    cb();
+                } catch(e) {
+                    // Error: callback {"__c__":1,"once":true} can only be callback once, if need to callback multiple times, use __s__.wrapCallback to manage callback lifetime explicitly
+                    if (!e.message.includes('manage callback lifetime explicitly')) {
+                        e.fail();
+                    }
+                }
+            }
+        }
+    });
+    await ctx.load(`setTimeout(() => 100)`);
+    ctx.dispose();
+}
+
 async function main() {
     await Promise.all([test1(), test2(), test3(), test4(), test6()])
     await test5();
@@ -303,6 +326,7 @@ async function main() {
     await test14();
     await test15();
     await test16();
+    await test17();
 }
 
 main();
