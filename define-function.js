@@ -57,21 +57,29 @@ class Context {
                 wrapCallback(callback) {
                     const callbackId = this.nextId++;
                     this.callbacks.set(callbackId, callback);
-                    return callbackId;
+                    return { __c__: callbackId };
                 },
                 getAndDeletePromise(promiseId) {
                     const promise = this.promises.get(promiseId);
                     this.promises.delete(promiseId);
                     return promise;
                 },
-                invokeCallback(callbackId, args) {
+                invokeCallback(callbackToken, args) {
+                    const callbackId = callbackToken.__c__;
+                    if (!callbackId) {
+                        throw new Error('invokeCallback with invalid token: ' + callbackToken);
+                    }
                     const callback = this.callbacks.get(callbackId);
                     if (!callback) {
                         return undefined;
                     }
                     return callback.apply(undefined, args);
                 },
-                deleteCallback(callbackId) {
+                deleteCallback(callbackToken) {
+                    const callbackId = callbackToken.__c__;
+                    if (!callbackId) {
+                        throw new Error('deleteCallback with invalid token: ' + callbackToken);
+                    }
                     this.callbacks.delete(callbackId);
                 },
                 inspect(msg, obj) {
@@ -167,10 +175,10 @@ class Context {
             if (typeof v === 'function') {
                 args.push(k);
                 args.push((...args) => {
-                    args = args.map(arg => arg && arg.__f__ ? this.asCallback(arg.__f__) : arg);
+                    args = args.map(arg => arg?.__c__ ? this.asCallback(arg) : arg);
                     if (args[0] && typeof args[0] === 'object') {
                         for (const [k, v] of Object.entries(args[0])) {
-                            args[0][k] = v?.__f__ ? this.asCallback(v.__f__) : v;
+                            args[0][k] = v?.__c__ ? this.asCallback(v) : v;
                         }
                     }
                     return v.apply(obj, args);
@@ -309,10 +317,10 @@ class Context {
                     // the argument is a function
                     if (arg && arg.__f__) {
                         return function(...args) {
-                            args = args.map(arg => typeof arg === 'function' ? { __f__: global.__s__.wrapCallback(arg) } : arg);
+                            args = args.map(arg => typeof arg === 'function' ? global.__s__.wrapCallback(arg) : arg);
                             if (args[0] && typeof args[0] === 'object') {
                                 for (const [k, v] of Object.entries(args[0])) {
-                                    args[0][k] = typeof v === 'function' ? { __f__: global.__s__.wrapCallback(v) } : v;
+                                    args[0][k] = typeof v === 'function' ? global.__s__.wrapCallback(v) : v;
                                 }
                             }
                             const invokeResult = dispatch('invoke', { slot:i, args });

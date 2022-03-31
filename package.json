@@ -22,7 +22,8 @@
     "files": [
         "index.node.js",
         "index.browser.js",
-        "index.d.js",
+        "index.d.ts",
+        "__s__.d.ts",
         "define-function.js",
         "load-eval-wasm.js",
         "eval.wasm",
