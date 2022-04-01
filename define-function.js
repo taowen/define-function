@@ -45,7 +45,6 @@ class Context {
                 inspectingObjects: new Map(),
                 currentStack: '',
                 hostInspect: undefined, // inject later
-                deleteHostObject: undefined, // inject later
                 createPromise() {
                     const promiseId = this.nextId++;
                     const result = { __p__: promiseId };
@@ -122,19 +121,26 @@ class Context {
                         }
                     }
                     const invokeResult = __invokeHostFunction(JSON.stringify(hostFunctionToken), JSON.stringify(args));
-                    if (invokeResult && invokeResult.__p__) {
+                    if (hostFunctionToken.returnsHostObject && invokeResult?.__h__) {
+                        return this.asHostFunction(invokeResult);
+                    }
+                    if (invokeResult?.__p__) {
                         return this.getAndDeletePromise(invokeResult.__p__);
                     }
                     return invokeResult;
                 },
                 callMethod(hostObj, method, ...args) {
-                    return this.invokeHostFunction(hostObj, ['callMethod', method, args]);
+                    const result = hostObj('callMethod', method, args);
+                    return result?.__h__ ? this.asHostFunction(result) : result;
                 },
                 getProp(hostObj, prop) {
-                    return this.invokeHostFunction(hostObj, ['getProp', prop]);
+                    return hostObj('getProp', prop);
                 },
                 setProp(hostObj, prop, propVal) {
-                    return this.invokeHostFunction(hostObj, ['setProp', prop, propVal]);
+                    return hostObj('setProp', prop, propVal);
+                },
+                deleteHostObject(hostObj) {
+                    return hostObj('delete');
                 }
             };        
         `);
@@ -152,7 +158,6 @@ class Context {
             }
         }
         this.def(`__s__.hostInspect = arguments[0]`)(this.wrapHostFunction(this.hostInspect.bind(this), { nowrap: true }));
-        this.def(`__s__.deleteHostObject = arguments[0]`)(this.wrapHostFunction(this.deleteHostFunction.bind(this), { nowrap: true }));
     }
 
     dispose() {
@@ -215,9 +220,6 @@ class Context {
     }
 
     inject(target, obj) {
-        if (!global) {
-            return;
-        }
         const args = [target];
         for (const [k, v] of Object.entries(obj)) {
             if (typeof v === 'function') {
@@ -448,7 +450,7 @@ class Context {
         if (typeof val !== 'object') {
             return val;
         }
-        return this.wrapHostFunction((action, prop, args) => {
+        const token = this.wrapHostFunction((action, prop, args) => {
             switch(action) {
                 case 'callMethod':
                     return this.wrapHostObject(val[prop](...args));
@@ -457,9 +459,13 @@ class Context {
                 case 'setProp':
                     val[prop] = args;
                     return undefined;
+                case 'delete':
+                    this.deleteHostFunction(token);
+                    return undefined;
             }
             throw new Error(`unknown action: ${action}`);
         })
+        return token;
     }
 }
 
