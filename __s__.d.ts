@@ -1,8 +1,8 @@
-type callbackToken = { __brand: 'callbackToken' }
+type sandboxFunctionToken = { __brand: 'sandboxFunctionToken' }
 declare const __s__: {
-    wrapCallback(f: Function): callbackToken;
-    invokeCallback(callbackToken: callbackToken, args: any[]): any;
-    deleteCallback(callbackToken: callbackToken);
+    wrapSandboxFunction(f: Function): sandboxFunctionToken;
+    invokeSandboxFunction(callbackToken: sandboxFunctionToken, args: any[]): any;
+    deleteSandboxFunction(callbackToken: sandboxFunctionToken);
     getProp(hostObj: any, prop: string): any;
     setProp(hostObj: any, prop: string, value: any): void;
     callMethod(hostObj: any, method: string, ...args: any[]): any;

@@ -28,8 +28,8 @@ class Context {
     ctx = undefined;
     moduleContents = {};
     createPromise;
-    invokeCallback;
-    deleteCallback;
+    invokeSandboxFunction;
+    deleteSandboxFunction;
     hostFunctions = new Map();
 
     constructor(options) {
@@ -50,12 +50,12 @@ class Context {
                     const promiseId = this.nextId++;
                     const result = { __p__: promiseId };
                     this.promises.set(promiseId, new Promise((resolve, reject) => {
-                        result.resolve = this.wrapCallback(resolve);
-                        result.reject = this.wrapCallback(reject);
+                        result.resolve = this.wrapSandboxFunction(resolve);
+                        result.reject = this.wrapSandboxFunction(reject);
                     }));
                     return result;
                 },
-                wrapCallback(callback, extra) {
+                wrapSandboxFunction(callback, extra) {
                     let callbackId = this.callbacksLookup.get(callback);
                     if (callbackId === undefined) {
                         callbackId = this.nextId++;
@@ -69,10 +69,10 @@ class Context {
                     this.promises.delete(promiseId);
                     return promise;
                 },
-                invokeCallback(callbackToken, args) {
+                invokeSandboxFunction(callbackToken, args) {
                     const callbackId = callbackToken.__c__;
                     if (!callbackId) {
-                        throw new Error('invokeCallback with invalid token: ' + JSON.stringify(callbackToken));
+                        throw new Error('invokeSandboxFunction with invalid token: ' + JSON.stringify(callbackToken));
                     }
                     const callback = this.callbacks.get(callbackId);
                     if (!callback) {
@@ -80,10 +80,10 @@ class Context {
                     }
                     return callback.apply(undefined, args);
                 },
-                deleteCallback(callbackToken) {
+                deleteSandboxFunction(callbackToken) {
                     const callbackId = callbackToken.__c__;
                     if (!callbackId) {
-                        throw new Error('deleteCallback with invalid token: ' + JSON.stringify(callbackToken));
+                        throw new Error('deleteSandboxFunction with invalid token: ' + JSON.stringify(callbackToken));
                     }
                     let callback = this.callbacks.get(callbackId);
                     if (callback !== undefined) {
@@ -107,11 +107,11 @@ class Context {
                 },
                 invokeHostFunction(hostFunctionToken, args) {
                     if (!hostFunctionToken.nowrap) {
-                        args = args.map(arg => typeof arg === 'function' ? this.wrapCallback(arg, { once: true }) : arg);
+                        args = args.map(arg => typeof arg === 'function' ? this.wrapSandboxFunction(arg, { once: true }) : arg);
                         if (args[0] && typeof args[0] === 'object') {
                             for (const [k, v] of Object.entries(args[0])) {
                                 if (typeof v === 'function') {
-                                    args[0][k] = this.wrapCallback(v, { once: true });
+                                    args[0][k] = this.wrapSandboxFunction(v, { once: true });
                                 }
                             }
                         }
@@ -134,8 +134,8 @@ class Context {
             };        
         `);
         this.createPromise = this.def(`return __s__.createPromise()`);
-        this.invokeCallback = this.def(`return __s__.invokeCallback(...arguments)`);
-        this.deleteCallback = this.def(`return __s__.deleteCallback(...arguments)`);
+        this.invokeSandboxFunction = this.def(`return __s__.invokeSandboxFunction(...arguments)`);
+        this.deleteSandboxFunction = this.def(`return __s__.deleteSandboxFunction(...arguments)`);
         this.getInspectingObjectProp = this.def(`return __s__.getInspectingObjectProp(...arguments)`);
         this.currentStack = this.def(`return __s__.currentStack`);
         if (options?.global) {
@@ -187,7 +187,7 @@ class Context {
         return proxy;
     }
 
-    asCallback(callbackToken) {
+    asSandboxFunction(callbackToken) {
         let calledOnce = false;
         return (...args) => {
             if (!this.ctx) {
@@ -195,15 +195,15 @@ class Context {
             }
             if (callbackToken.once) {
                 if (calledOnce) {
-                    throw new Error(`callback ${JSON.stringify(callbackToken)} can only be callback once, if need to callback multiple times, use __s__.wrapCallback to manage callback lifetime explicitly`)
+                    throw new Error(`callback ${JSON.stringify(callbackToken)} can only be callback once, if need to callback multiple times, use __s__.wrapSandboxFunction to manage callback lifetime explicitly`)
                 }
                 calledOnce = true;
             }
             try {
-                return this.invokeCallback(callbackToken, args);
+                return this.invokeSandboxFunction(callbackToken, args);
             } finally {
                 if (callbackToken.once) {
-                    this.deleteCallback(callbackToken);
+                    this.deleteSandboxFunction(callbackToken);
                 }
             }
         }
@@ -304,7 +304,7 @@ class Context {
                 const exports = {};
                 for(const [k, v] of Object.entries(m)) {
                     if (typeof v === 'function') {
-                        exports[k] = __s__.wrapCallback(v);
+                        exports[k] = __s__.wrapSandboxFunction(v);
                     } else {
                         exports[k] = v;
                     }
@@ -316,7 +316,7 @@ class Context {
         const loadedModule = JSON.parse(await this._loadModule(filename));
         for (const [k, v] of Object.entries(loadedModule)) {
             if (v?.__c__) {
-                loadedModule[k] = this.asCallback(v);
+                loadedModule[k] = this.asSandboxFunction(v);
             }
         }
         return loadedModule;
@@ -402,11 +402,11 @@ class Context {
             throw new Error('callHostFunction with invalid token: ' + JSON.stringify(hostFunctionToken));
         }
         if (!hostFunctionToken.nowrap) {
-            args = args.map(arg => arg?.__c__ ? this.asCallback(arg) : arg);
+            args = args.map(arg => arg?.__c__ ? this.asSandboxFunction(arg) : arg);
             if (args[0] && typeof args[0] === 'object') {
                 for (const [k, v] of Object.entries(args[0])) {
                     if (v?.__c__) {
-                        args[0][k] = this.asCallback(v);
+                        args[0][k] = this.asSandboxFunction(v);
                     }
                 }
             }
@@ -421,18 +421,18 @@ class Context {
             invokeResult
                 .then(v => {
                     if (this.ctx) {
-                        this.invokeCallback(resolve, [v]);
+                        this.invokeSandboxFunction(resolve, [v]);
                     }
                 })
                 .catch(e => {
                     if (this.ctx) {
-                        this.invokeCallback(reject, ['' + e]);
+                        this.invokeSandboxFunction(reject, ['' + e]);
                     }
                 })
                 .finally(() => {
                     if (this.ctx) {
-                        this.deleteCallback(resolve);
-                        this.deleteCallback(reject);
+                        this.deleteSandboxFunction(resolve);
+                        this.deleteSandboxFunction(reject);
                     }
                 });
             return { __p__ };
