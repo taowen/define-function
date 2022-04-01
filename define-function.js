@@ -105,6 +105,11 @@ class Context {
                     }
                     return val;
                 },
+                asHostFunction(hostFunctionToken) {
+                    return (...args) => {
+                        return this.invokeHostFunction(hostFunctionToken, args);
+                    };
+                },
                 invokeHostFunction(hostFunctionToken, args) {
                     if (!hostFunctionToken.nowrap) {
                         args = args.map(arg => typeof arg === 'function' ? this.wrapSandboxFunction(arg, { once: true }) : arg);
@@ -331,35 +336,28 @@ class Context {
                 throw new Error('context has been disposed');
             }
             const invocation = new Invocation(this, options?.timeout);
+            const setSuccessToken = invocation.wrapHostFunction(invocation.setSuccess.bind(invocation), { nowrap: true });
+            const setFailureToken = invocation.wrapHostFunction(invocation.setFailure.bind(invocation), { nowrap: true });
+            const encodedArgs = args.map((arg, index) => typeof arg === 'function' ? invocation.wrapHostFunction(arg, { argIndex: index}) : arg);
             const pScript = allocateUTF8(`
             (() => {
-                const setSuccess = ${JSON.stringify(invocation.wrapHostFunction(invocation.setSuccess.bind(invocation), { nowrap: true }))};
-                const setFailure = ${JSON.stringify(invocation.wrapHostFunction(invocation.setFailure.bind(invocation), { nowrap: true }))};
-                const __args = ${JSON.stringify(args.map((arg, index) => typeof arg === 'function' ? invocation.wrapHostFunction(arg, { argIndex: index}) : arg))};
-                function decodeArg(arg, i) {
-                    // the argument is a function
-                    if (arg?.__h__) {
-                        const hostFunction = arg;
-                        return function(...args) {
-                            return __s__.invokeHostFunction(hostFunction, args);
-                        }
-                    }
-                    return arg;
-                }
+                const setSuccess = __s__.asHostFunction(${JSON.stringify(setSuccessToken)});
+                const setFailure = __s__.asHostFunction(${JSON.stringify(setFailureToken)});
+                const args = ${JSON.stringify(encodedArgs)};
                 function f() {
                     ${script}
                 }
                 try {
-                    const result = f.apply(undefined, __args.map((arg, i) => decodeArg(arg, i)));
+                    const result = f.apply(undefined, args.map(arg => arg?.__h__ ? __s__.asHostFunction(arg) : arg));
                     if (result && result.then && result.catch) {
                         result
-                            .then(v => { __s__.invokeHostFunction(setSuccess, [v]); })
-                            .catch(e => { __s__.invokeHostFunction(setFailure, ['' + e + '' + e.stack]); })
+                            .then(v => { setSuccess(v); })
+                            .catch(e => { setFailure('' + e + '' + e.stack); })
                     } else {
-                        __s__.invokeHostFunction(setSuccess, [result]);
+                        setSuccess(result);
                     }
                 } catch(e) {
-                    __s__.invokeHostFunction(setFailure, ["" + e + "" + e.stack]);
+                    setFailure('' + e + '' + e.stack);
                 }
             })();
             `);
