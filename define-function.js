@@ -341,7 +341,7 @@ class Context {
             const setSuccessToken = invocation.wrapHostFunction(invocation.setSuccess.bind(invocation), { nowrap: true });
             const setFailureToken = invocation.wrapHostFunction(invocation.setFailure.bind(invocation), { nowrap: true });
             const encodedArgs = args.map((arg, index) => typeof arg === 'function' ? invocation.wrapHostFunction(arg, { argIndex: index}) : arg);
-            const pScript = allocateUTF8(`
+            this.loadSync(`
             (() => {
                 const setSuccess = __s__.asHostFunction(${JSON.stringify(setSuccessToken)});
                 const setFailure = __s__.asHostFunction(${JSON.stringify(setFailureToken)});
@@ -362,13 +362,7 @@ class Context {
                     setFailure('' + e + '' + e.stack);
                 }
             })();
-            `);
-            const pError = wasm._eval(this.ctx, pScript);
-            if (pError) {
-                const error = new Error(wasm.UTF8ToString(pError));
-                wasm._free(pError);
-                throw error;
-            }
+            `, options);
             (async () => {
                 try {
                     await invocation.asyncResult;

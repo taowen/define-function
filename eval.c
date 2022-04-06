@@ -151,18 +151,6 @@ char *pathJoin(JSContext *ctx, const char *base_name, const char *name) {
     return copiedModuleName;
 }
 
-EMSCRIPTEN_KEEPALIVE
-const char* eval(JSContext* ctx, char* str) {
-    JSValue result = JS_Eval(ctx, str, strlen(str), "<eval>", JS_EVAL_TYPE_GLOBAL);
-    if (JS_IsException(result)) {
-		return dumpException(ctx);
-	}
-    JS_FreeValue(ctx, result);
-    js_std_loop(ctx);
-    free((void*)str);
-    return 0;
-}
-
 #define __exception __attribute__((warn_unused_result))
 
 __exception int JS_CopyDataProperties(JSContext *ctx,
