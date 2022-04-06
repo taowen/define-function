@@ -94,7 +94,7 @@ share context between multiple invocations
 
 ```js
 const { context } = require('define-function')
-const ctx = context()
+const ctx = await context()
 const f = await ctx.def(`
     global.counter = (global.counter || 0)+1;
     return counter; // counter can be referenced globally
@@ -109,7 +109,7 @@ inject value and callbacks into global
 
 ```js
 const { context } = require('define-function')
-const ctx = context({ global: { 
+const ctx = await context({ global: { 
     console,
     anwerOfEverything() {
         return 42;
@@ -126,7 +126,7 @@ import and export es module
 
 ```js
 const { context } = require('define-function')
-const ctx = context({ 
+const ctx = await context({ 
     loadModuleContent(moduleName) {
         if (moduleName !== 'xxx') {
             throw new Error('expect xxx');
