@@ -208,6 +208,9 @@ class Context {
                 }
                 calledOnce = true;
             }
+            if (callbackToken.expectsHostObject) {
+                args = args.map(arg => arg && typeof arg === 'object' ? this.wrapHostObject(arg) : arg);
+            }
             try {
                 return this.invokeSandboxFunction(callbackToken, args);
             } finally {
