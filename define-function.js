@@ -105,6 +105,9 @@ class Context {
                     return val;
                 },
                 asHostFunction(hostFunctionToken) {
+                    if(!hostFunctionToken?.__h__) {
+                        throw new Error('invalid host function token: '+ JSON.stringify(hostFunctionToken));
+                    }
                     return (...args) => {
                         return this.invokeHostFunction(hostFunctionToken, args);
                     };
@@ -121,26 +124,22 @@ class Context {
                         }
                     }
                     const invokeResult = __invokeHostFunction(JSON.stringify(hostFunctionToken), JSON.stringify(args));
-                    if (hostFunctionToken.returnsHostObject && invokeResult?.__h__) {
-                        return this.asHostFunction(invokeResult);
-                    }
                     if (invokeResult?.__p__) {
                         return this.getAndDeletePromise(invokeResult.__p__);
                     }
                     return invokeResult;
                 },
                 callMethod(hostObj, method, ...args) {
-                    const result = hostObj('callMethod', method, ...args);
-                    return result?.__h__ ? this.asHostFunction(result) : result;
+                    return this.asHostFunction(hostObj)('callMethod', method, ...args);
                 },
                 getProp(hostObj, prop) {
-                    return hostObj('getProp', prop);
+                    return this.asHostFunction(hostObj)('getProp', prop);
                 },
                 setProp(hostObj, prop, propVal) {
-                    return hostObj('setProp', prop, propVal);
+                    return this.asHostFunction(hostObj)('setProp', prop, propVal);
                 },
                 deleteHostObject(hostObj) {
-                    return hostObj('delete');
+                    return this.asHostFunction(hostObj)('delete');
                 }
             };        
         `);
@@ -389,18 +388,29 @@ class Context {
         }
         this.hostFunctions.delete(hfId);
     }
-
+    unwrapHostFunctionArg(arg) {
+        if (arg.__c__) {
+            return this.asSandboxFunction(arg);
+        }
+        if (arg.__h__) {
+            if (arg.isObject) {
+                return this.hostFunctions.get(arg.__h__)('this');
+            }
+            return this.hostFunctions.get(arg.__h__);
+        }
+        throw new Error('unexpected');
+    }
     invokeHostFunction(hostFunctionToken, args) {
         const hfId = hostFunctionToken.__h__;
         if (!hfId) {
             throw new Error('callHostFunction with invalid token: ' + JSON.stringify(hostFunctionToken));
         }
         if (!hostFunctionToken.nowrap) {
-            args = args.map(arg => arg?.__c__ ? this.asSandboxFunction(arg) : arg);
+            args = args.map(arg => arg?.__c__ || arg?.__h__ ? this.unwrapHostFunctionArg(arg) : arg);
             if (args[0] && typeof args[0] === 'object') {
                 for (const [k, v] of Object.entries(args[0])) {
-                    if (v?.__c__) {
-                        args[0][k] = this.asSandboxFunction(v);
+                    if (v?.__c__ || v?.__h__) {
+                        args[0][k] = this.unwrapHostFunctionArg(v);
                     }
                 }
             }
@@ -448,6 +458,8 @@ class Context {
         }
         const token = this.wrapHostFunction((action, prop, ...args) => {
             switch(action) {
+                case 'this': 
+                    return val;
                 case 'callMethod':
                     return this.wrapHostObject(val[prop](...args));
                 case 'getProp':
@@ -460,7 +472,7 @@ class Context {
                     return undefined;
             }
             throw new Error(`unknown action: ${action}`);
-        })
+        }, { isObject: true })
         return token;
     }
 }

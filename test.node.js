@@ -313,6 +313,25 @@ async function test17() {
     ctx.dispose();
 }
 
+async function test18() {
+    const { context } = require('./index.node');
+    const ctx = await context({ global: { console }});
+    ctx.inject('global', {
+        createABC: ctx.wrapHostFunction(() => {
+            return { val: 100 }
+        }, { returnsHostObject: true }),
+        useABC: (arg) => {
+            if (arg?.val !== 100) {
+                assert.fail();
+            }
+        }
+    })
+    await ctx.load(`
+        useABC(createABC());
+    `);
+    ctx.dispose();
+}
+
 async function main() {
     await Promise.all([test1(), test2(), test3(), test4(), test6()])
     await test5();
@@ -327,6 +346,7 @@ async function main() {
     await test15();
     await test16();
     await test17();
+    await test18();
 }
 
 main();
