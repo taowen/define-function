@@ -130,7 +130,7 @@ class Context {
                     return invokeResult;
                 },
                 callMethod(hostObj, method, ...args) {
-                    const result = hostObj('callMethod', method, args);
+                    const result = hostObj('callMethod', method, ...args);
                     return result?.__h__ ? this.asHostFunction(result) : result;
                 },
                 getProp(hostObj, prop) {
@@ -410,6 +410,7 @@ class Context {
             throw new Error('host function not found: ' + JSON.stringify(hostFunctionToken));
         }
         const invokeResult = hostFunc(...args);
+        // promise will be passed-through automatically
         if (invokeResult && invokeResult.then && invokeResult.catch) {
             const { __p__, resolve, reject } = this.createPromise();
             invokeResult
@@ -431,6 +432,7 @@ class Context {
                 });
             return { __p__ };
         }
+        // non JSON stringifyable circular object need to be declared explicitly with returnsHostObject: true
         if (hostFunctionToken.returnsHostObject) {
             return this.wrapHostObject(invokeResult);
         }
@@ -444,7 +446,7 @@ class Context {
         if (typeof val !== 'object') {
             return val;
         }
-        const token = this.wrapHostFunction((action, prop, args) => {
+        const token = this.wrapHostFunction((action, prop, ...args) => {
             switch(action) {
                 case 'callMethod':
                     return this.wrapHostObject(val[prop](...args));
